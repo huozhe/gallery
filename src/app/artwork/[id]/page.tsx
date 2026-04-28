@@ -1,10 +1,53 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { artworks, getArtwork } from "@/data/artwork";
+import ArtworkImage from "@/components/ArtworkImage";
 
 export function generateStaticParams() {
   return artworks.map((a) => ({ id: a.id }));
+}
+
+function Metadata({ artwork }: { artwork: ReturnType<typeof getArtwork> & object }) {
+  return (
+    <div>
+      <h1 className="text-2xl font-medium">{artwork.title}</h1>
+      <dl className="mt-4 space-y-2 text-sm text-neutral-600">
+        <div className="flex gap-2">
+          <dt className="w-24 shrink-0">Year</dt>
+          <dd>{artwork.year}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="w-24 shrink-0">Medium</dt>
+          <dd>{artwork.medium}</dd>
+        </div>
+        {artwork.dimensions && (
+          <div className="flex gap-2">
+            <dt className="w-24 shrink-0">Dimensions</dt>
+            <dd>{artwork.dimensions}</dd>
+          </div>
+        )}
+      </dl>
+      {artwork.description && (
+        <p className="mt-6 text-sm leading-relaxed text-neutral-700">
+          {artwork.description.split(/(https?:\/\/\S+)/).map((part, i) =>
+            /^https?:\/\//.test(part) ? (
+              <a
+                key={i}
+                href={part}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-neutral-900 transition-colors"
+              >
+                {part}
+              </a>
+            ) : (
+              part
+            )
+          )}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default async function ArtworkPage({
@@ -16,6 +59,8 @@ export default async function ArtworkPage({
   const artwork = getArtwork(id);
   if (!artwork) notFound();
 
+  const isLandscape = artwork.width > artwork.height;
+
   return (
     <main className="px-8 py-12 max-w-5xl mx-auto">
       <Link
@@ -24,56 +69,30 @@ export default async function ArtworkPage({
       >
         ← Back
       </Link>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
-        <div className="bg-neutral-100 overflow-hidden">
-          <Image
+
+      {isLandscape ? (
+        // Landscape: full-width image, metadata below
+        <div className="space-y-8">
+          <ArtworkImage
             src={artwork.image}
             alt={artwork.title}
-            width={800}
-            height={1000}
-            className="w-full h-auto object-contain"
-            priority
+            width={artwork.width}
+            height={artwork.height}
           />
+          <Metadata artwork={artwork} />
         </div>
-        <div className="md:pt-4">
-          <h1 className="text-2xl font-medium">{artwork.title}</h1>
-          <dl className="mt-4 space-y-2 text-sm text-neutral-600">
-            <div className="flex gap-2">
-              <dt className="w-24 shrink-0">Year</dt>
-              <dd>{artwork.year}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-24 shrink-0">Medium</dt>
-              <dd>{artwork.medium}</dd>
-            </div>
-            {artwork.dimensions && (
-              <div className="flex gap-2">
-                <dt className="w-24 shrink-0">Dimensions</dt>
-                <dd>{artwork.dimensions}</dd>
-              </div>
-            )}
-          </dl>
-          {artwork.description && (
-            <p className="mt-6 text-sm leading-relaxed text-neutral-700">
-              {artwork.description.split(/(https?:\/\/\S+)/).map((part, i) =>
-                /^https?:\/\//.test(part) ? (
-                  <a
-                    key={i}
-                    href={part}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-neutral-900 transition-colors"
-                  >
-                    {part}
-                  </a>
-                ) : (
-                  part
-                )
-              )}
-            </p>
-          )}
+      ) : (
+        // Portrait: image left, metadata right
+        <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-12 items-start">
+          <ArtworkImage
+            src={artwork.image}
+            alt={artwork.title}
+            width={artwork.width}
+            height={artwork.height}
+          />
+          <Metadata artwork={artwork} />
         </div>
-      </div>
+      )}
     </main>
   );
 }
