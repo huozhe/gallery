@@ -3,14 +3,16 @@ import Image from "next/image";
 import type { Artwork } from "@/data/artwork";
 
 export default function ArtworkCard({ artwork }: { artwork: Artwork }) {
+  const isLandscape = artwork.width > artwork.height;
+
   return (
-    <Link href={`/artwork/${artwork.id}`} className="group block">
-      <div className="overflow-hidden bg-neutral-100 aspect-[4/5]">
+    <Link href={`/artwork/${artwork.id}`} className="group block break-inside-avoid mb-8">
+      <div className={`overflow-hidden bg-neutral-100 ${isLandscape ? "aspect-[4/3]" : "aspect-[3/4]"}`}>
         <Image
           src={artwork.image}
           alt={artwork.title}
-          width={800}
-          height={1000}
+          width={artwork.width}
+          height={artwork.height}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
       </div>
