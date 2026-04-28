@@ -28,23 +28,27 @@ function Metadata({ artwork }: { artwork: ReturnType<typeof getArtwork> & object
         )}
       </dl>
       {artwork.description && (
-        <p className="mt-6 text-sm leading-relaxed text-neutral-700">
-          {artwork.description.split(/(https?:\/\/\S+)/).map((part, i) =>
-            /^https?:\/\//.test(part) ? (
-              <a
-                key={i}
-                href={part}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-neutral-900 transition-colors"
-              >
-                {part}
-              </a>
-            ) : (
-              part
-            )
-          )}
-        </p>
+        <div className="mt-6 space-y-3 text-sm leading-relaxed text-neutral-700">
+          {artwork.description.split("\n").map((line, li) => (
+            <p key={li}>
+              {line.split(/(https?:\/\/\S+)/).map((part, i) =>
+                /^https?:\/\//.test(part) ? (
+                  <a
+                    key={i}
+                    href={part}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-neutral-900 transition-colors"
+                  >
+                    link
+                  </a>
+                ) : (
+                  part
+                )
+              )}
+            </p>
+          ))}
+        </div>
       )}
     </div>
   );
