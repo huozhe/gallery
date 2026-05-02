@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { artworks } from "@/lib/store";
 import type { Artwork } from "@/data/types";
 import ArtworkImage from "@/components/ArtworkImage";
+import ReferenceImage from "@/components/ReferenceImage";
 
 function Metadata({ artwork }: { artwork: Artwork }) {
   const ref = artwork.reference;
@@ -53,14 +54,13 @@ function Metadata({ artwork }: { artwork: Artwork }) {
       {ref && (
         <div className="mt-6 pt-4 border-t border-neutral-200 text-sm text-neutral-600 space-y-3">
           {ref.image && (
-            <div className="max-w-[220px]">
-              <ArtworkImage
-                src={ref.image}
-                alt={`Reference: ${ref.caption}`}
-                width={ref.imageWidth ?? 800}
-                height={ref.imageHeight ?? 600}
-              />
-            </div>
+            <ReferenceImage
+              src={ref.image}
+              alt={ref.caption}
+              width={ref.imageWidth ?? 800}
+              height={ref.imageHeight ?? 600}
+              caption={ref.caption}
+            />
           )}
           <p>{ref.caption}</p>
           {ref.url && (
