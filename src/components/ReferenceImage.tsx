@@ -69,15 +69,15 @@ export default function ReferenceImage({ src, alt, width, height, caption }: Pro
         />
       </button>
 
-      {/* Draggable floating panel */}
+      {/* Draggable, resizable floating panel */}
       {open && (
         <div
-          style={{ left: pos.x, top: pos.y, width: 380 }}
-          className="fixed z-50 bg-white border border-neutral-300 shadow-2xl select-none"
+          style={{ left: pos.x, top: pos.y, width: 380, height: 340, minWidth: 180, minHeight: 140 }}
+          className="fixed z-50 flex flex-col bg-white border border-neutral-300 shadow-2xl select-none overflow-hidden resize"
         >
           {/* Title bar — drag handle */}
           <div
-            className="flex items-center justify-between gap-2 px-3 py-2 bg-neutral-100 border-b border-neutral-200 cursor-grab active:cursor-grabbing"
+            className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 bg-neutral-100 border-b border-neutral-200 cursor-grab active:cursor-grabbing"
             onPointerDown={startDrag}
             onPointerMove={onDrag}
             onPointerUp={stopDrag}
@@ -94,14 +94,16 @@ export default function ReferenceImage({ src, alt, width, height, caption }: Pro
             </button>
           </div>
 
-          {/* Reference image — fills the panel */}
-          <Image
-            src={src}
-            alt={alt}
-            width={width}
-            height={height}
-            className="w-full h-auto object-contain"
-          />
+          {/* Image fills remaining space via fill layout */}
+          <div className="relative flex-1 min-h-0 overflow-hidden">
+            <Image
+              src={src}
+              alt={alt}
+              fill
+              className="object-contain"
+              sizes="50vw"
+            />
+          </div>
         </div>
       )}
     </>
