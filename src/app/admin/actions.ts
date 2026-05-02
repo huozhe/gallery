@@ -180,7 +180,13 @@ const SaveArtworkSchema = z.object({
   orderGlobal: z.number().int().min(0),
   orderByTag: z.record(z.string(), z.number()),
   reference: z
-    .object({ caption: z.string().min(1), url: z.string().optional() })
+    .object({
+      caption: z.string().min(1),
+      url: z.string().optional(),
+      image: z.string().optional(),
+      imageWidth: z.number().int().positive().optional(),
+      imageHeight: z.number().int().positive().optional(),
+    })
     .nullable()
     .optional(),
   isNew: z.boolean(),

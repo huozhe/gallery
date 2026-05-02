@@ -4,6 +4,8 @@ export type ArtworkReference = {
   caption: string;
   url?: string;
   image?: string;
+  imageWidth?: number;
+  imageHeight?: number;
 };
 
 export type Artwork = {

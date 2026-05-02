@@ -5,6 +5,7 @@ import type { Artwork } from "@/data/types";
 import ArtworkImage from "@/components/ArtworkImage";
 
 function Metadata({ artwork }: { artwork: Artwork }) {
+  const ref = artwork.reference;
   return (
     <div>
       <h1 className="text-2xl font-medium">{artwork.title}</h1>
@@ -24,6 +25,7 @@ function Metadata({ artwork }: { artwork: Artwork }) {
           </div>
         )}
       </dl>
+
       {artwork.description && (
         <div className="mt-6 space-y-3 text-sm leading-relaxed text-neutral-700">
           {artwork.description.split("\n").map((line, li) => (
@@ -47,12 +49,23 @@ function Metadata({ artwork }: { artwork: Artwork }) {
           ))}
         </div>
       )}
-      {artwork.reference && (
-        <div className="mt-6 pt-4 border-t border-neutral-200 text-sm text-neutral-600">
-          <p>{artwork.reference.caption}</p>
-          {artwork.reference.url && (
+
+      {ref && (
+        <div className="mt-6 pt-4 border-t border-neutral-200 text-sm text-neutral-600 space-y-3">
+          {ref.image && (
+            <div className="max-w-[220px]">
+              <ArtworkImage
+                src={ref.image}
+                alt={`Reference: ${ref.caption}`}
+                width={ref.imageWidth ?? 800}
+                height={ref.imageHeight ?? 600}
+              />
+            </div>
+          )}
+          <p>{ref.caption}</p>
+          {ref.url && (
             <a
-              href={artwork.reference.url}
+              href={ref.url}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-neutral-900 transition-colors"

@@ -54,11 +54,19 @@ export default function ArtworkForm(props: Props) {
     orderByTag: src?.orderByTag ?? {},
   });
 
+  const [referenceImage, setReferenceImage] = useState({
+    path: src?.reference?.image ?? "",
+    width: src?.reference?.imageWidth ?? 0,
+    height: src?.reference?.imageHeight ?? 0,
+  });
+
   const [idManuallySet, setIdManuallySet] = useState(isEdit);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [refUploadStatus, setRefUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [error, setError] = useState<string>("");
   const [saving, startSave] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
+  const refFileRef = useRef<HTMLInputElement>(null);
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => {
@@ -90,13 +98,40 @@ export default function ArtworkForm(props: Props) {
     }
   }
 
+  async function handleRefFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !form.id) return;
+    setRefUploadStatus("uploading");
+    try {
+      const dims = await getImageDimensions(file);
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("width", String(dims.width));
+      fd.append("height", String(dims.height));
+      fd.append("dir", `reference/${form.id}`);
+      const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json() as { path: string; width: number; height: number };
+      setReferenceImage({ path: data.path, width: data.width, height: data.height });
+      setRefUploadStatus("done");
+    } catch {
+      setRefUploadStatus("error");
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     startSave(async () => {
       const reference =
         form.referenceCaption.trim()
-          ? { caption: form.referenceCaption.trim(), url: form.referenceUrl.trim() || undefined }
+          ? {
+              caption: form.referenceCaption.trim(),
+              url: form.referenceUrl.trim() || undefined,
+              image: referenceImage.path || undefined,
+              imageWidth: referenceImage.width || undefined,
+              imageHeight: referenceImage.height || undefined,
+            }
           : null;
 
       const result = await saveArtwork({
@@ -299,6 +334,39 @@ export default function ArtworkForm(props: Props) {
                 placeholder="https://…"
               />
             </Field>
+            <Field label="Reference image">
+              <div className="flex gap-4 items-start">
+                {referenceImage.path && (
+                  <div className="relative w-20 h-20 bg-neutral-100 overflow-hidden shrink-0">
+                    <Image src={referenceImage.path} alt="Reference" fill className="object-cover" />
+                  </div>
+                )}
+                <div>
+                  <input
+                    ref={refFileRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleRefFileChange}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => refFileRef.current?.click()}
+                    disabled={!form.id}
+                    className="border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-900 disabled:opacity-40"
+                    title={!form.id ? "Set an ID/slug first" : undefined}
+                  >
+                    {referenceImage.path ? "Replace" : "Upload reference image"}
+                  </button>
+                  {refUploadStatus === "uploading" && <p className="text-xs text-neutral-500 mt-1">Uploading…</p>}
+                  {refUploadStatus === "done" && <p className="text-xs text-green-700 mt-1">Uploaded ✓</p>}
+                  {refUploadStatus === "error" && <p className="text-xs text-red-700 mt-1">Upload failed.</p>}
+                  {referenceImage.path && (
+                    <p className="text-xs text-neutral-400 mt-1 font-mono">{referenceImage.path}</p>
+                  )}
+                </div>
+              </div>
+            </Field>
           </div>
         </section>
       </div>
@@ -339,10 +407,19 @@ export default function ArtworkForm(props: Props) {
           )}
           {form.referenceCaption && (
             <div className="mt-4 pt-4 border-t border-neutral-200 text-sm text-neutral-600">
-              <p>{form.referenceCaption}</p>
-              {form.referenceUrl && (
-                <span className="underline text-neutral-500">link</span>
+              {referenceImage.path && (
+                <div className="max-w-[160px] mb-2 bg-neutral-100 overflow-hidden">
+                  <Image
+                    src={referenceImage.path}
+                    alt="Reference"
+                    width={referenceImage.width || 400}
+                    height={referenceImage.height || 300}
+                    className="w-full h-auto object-contain"
+                  />
+                </div>
               )}
+              <p>{form.referenceCaption}</p>
+              {form.referenceUrl && <span className="underline text-neutral-500">link</span>}
             </div>
           )}
         </div>
