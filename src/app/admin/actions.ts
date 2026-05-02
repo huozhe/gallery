@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { ulid } from "ulid";
 import { z } from "zod";
-import { artworks, audit, sessions, users } from "@/lib/store";
+import { artworks, audit, sessions, tags, users } from "@/lib/store";
 import type { AuditAction } from "@/data/types";
 import {
   SESSION_COOKIE,
@@ -157,6 +157,119 @@ export async function signOut(): Promise<void> {
   }
   jar.delete(SESSION_COOKIE);
   redirect("/admin/sign-in");
+}
+
+// ---------- artwork save / create ----------
+
+const SaveArtworkSchema = z.object({
+  id: z
+    .string()
+    .min(1)
+    .max(80)
+    .regex(/^[a-zA-Z0-9-]+$/, "ID must contain only letters, numbers, and hyphens"),
+  title: z.string().min(1, "Title required").max(120),
+  year: z.number().int().min(1800).max(new Date().getFullYear() + 1),
+  medium: z.string().min(1, "Medium required"),
+  dimensions: z.string().optional(),
+  description: z.string().optional(),
+  image: z.string().min(1, "Image required"),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  status: z.enum(["live", "draft", "hidden"]),
+  tagIds: z.array(z.string()),
+  orderGlobal: z.number().int().min(0),
+  orderByTag: z.record(z.string(), z.number()),
+  reference: z
+    .object({ caption: z.string().min(1), url: z.string().optional() })
+    .nullable()
+    .optional(),
+  isNew: z.boolean(),
+});
+
+export type SaveArtworkInput = z.input<typeof SaveArtworkSchema>;
+export type SaveArtworkResult =
+  | { success: true; id: string }
+  | { success: false; error: string };
+
+export async function saveArtwork(input: unknown): Promise<SaveArtworkResult> {
+  await requireSession();
+  const parsed = SaveArtworkSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Validation error" };
+  }
+  const d = parsed.data;
+
+  if (d.isNew) {
+    const existing = await artworks.get(d.id);
+    if (existing) return { success: false, error: `ID "${d.id}" already exists` };
+  }
+
+  const now = new Date().toISOString();
+  await artworks.upsert({
+    id: d.id,
+    title: d.title,
+    year: d.year,
+    medium: d.medium,
+    dimensions: d.dimensions || undefined,
+    description: d.description || undefined,
+    image: d.image,
+    width: d.width,
+    height: d.height,
+    status: d.status,
+    tagIds: d.tagIds,
+    orderGlobal: d.orderGlobal,
+    orderByTag: d.orderByTag,
+    reference: d.reference ?? undefined,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await logAudit(d.isNew ? "artwork.create" : "artwork.update", d.id, {
+    title: { from: null, to: d.title },
+    status: { from: null, to: d.status },
+  });
+  revalidatePath("/admin");
+  revalidatePath("/");
+  revalidatePath(`/artwork/${d.id}`);
+  return { success: true, id: d.id };
+}
+
+const CreateTagSchema = z.object({
+  title: z.string().min(1).max(60),
+  id: z
+    .string()
+    .min(1)
+    .max(40)
+    .regex(/^[a-z0-9-]+$/, "Tag ID must be lowercase with hyphens"),
+});
+
+export type CreateTagResult =
+  | { success: true; tag: import("@/data/types").Tag }
+  | { success: false; error: string };
+
+export async function createTag(title: string, id: string): Promise<CreateTagResult> {
+  await requireSession();
+  const parsed = CreateTagSchema.safeParse({ title, id });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Validation error" };
+  }
+  const existing = await tags.get(parsed.data.id);
+  if (existing) return { success: false, error: `Tag "${id}" already exists` };
+
+  const allTags = await tags.list();
+  const now = new Date().toISOString();
+  const tag = await tags.upsert({
+    id: parsed.data.id,
+    title: parsed.data.title,
+    order: allTags.length,
+    visible: true,
+    isPrimaryRoom: false,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await logAudit("tag.create", tag.id, { title: { from: null, to: tag.title } });
+  revalidatePath("/admin");
+  return { success: true, tag };
 }
 
 // ---------- artwork mutations ----------
