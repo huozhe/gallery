@@ -137,12 +137,12 @@ export default function AdminDashboard({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search title or id…"
-          className="border border-neutral-300 px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-neutral-900"
+          className="border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 bg-white w-64 focus:outline-none focus:border-neutral-900"
         />
         <select
           value={tagFilter}
           onChange={(e) => setTagFilter(e.target.value)}
-          className="border border-neutral-300 px-2 py-1.5 text-sm bg-white"
+          className="border border-neutral-300 px-2 py-1.5 text-sm text-neutral-900 bg-white"
         >
           <option value="">All tags</option>
           {tags.map((t) => (
@@ -155,7 +155,7 @@ export default function AdminDashboard({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="border border-neutral-300 px-2 py-1.5 text-sm bg-white"
+            className="border border-neutral-300 px-2 py-1.5 text-sm text-neutral-900 bg-white"
           >
             <option value="">All status</option>
             <option value="live">Live</option>
@@ -185,7 +185,7 @@ export default function AdminDashboard({
       )}
 
       <div className="border border-neutral-200">
-        <div className="grid grid-cols-[24px_72px_1fr_140px_60px_1fr_80px_180px] gap-3 px-3 py-2 text-xs uppercase tracking-wide text-neutral-500 border-b border-neutral-200 bg-neutral-50">
+        <div className="grid grid-cols-[24px_72px_1fr_140px_60px_1fr_80px_180px] gap-3 px-3 py-2 text-xs uppercase tracking-wide text-neutral-500 border-b border-neutral-200 bg-neutral-50 [color-scheme:light]">
           <div></div>
           <div></div>
           <div>Title</div>
@@ -239,7 +239,7 @@ function Row({
     <div
       ref={setNodeRef}
       style={style}
-      className="grid grid-cols-[24px_72px_1fr_140px_60px_1fr_80px_180px] gap-3 px-3 py-2 items-center text-sm border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50"
+      className="grid grid-cols-[24px_72px_1fr_140px_60px_1fr_80px_180px] gap-3 px-3 py-2 items-center text-sm text-neutral-900 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 bg-white"
     >
       <div className="text-neutral-400">{dragHandle}</div>
       <div className="relative w-[60px] h-[60px] bg-neutral-100 overflow-hidden">
@@ -266,7 +266,7 @@ function Row({
             return (
               <span
                 key={tid}
-                className="text-xs px-1.5 py-0.5 bg-neutral-100 border border-neutral-200"
+                className="text-xs px-1.5 py-0.5 bg-neutral-100 border border-neutral-200 text-neutral-700"
               >
                 {t?.title ?? tid}
               </span>

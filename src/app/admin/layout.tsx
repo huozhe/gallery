@@ -6,8 +6,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const session = await getSession();
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="flex items-center justify-between px-8 py-4 border-b border-neutral-200 bg-neutral-50">
+    <div className="min-h-screen flex flex-col bg-white text-neutral-900">
+      <header className="flex items-center justify-between px-8 py-4 border-b border-neutral-200 bg-neutral-50 text-neutral-900">
         <div className="flex items-center gap-6">
           <Link href="/admin" className="text-sm font-medium tracking-tight">
             Works
