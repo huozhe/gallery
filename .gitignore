@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local store backend (option B; swap for Vercel KV in prod)
+/.data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

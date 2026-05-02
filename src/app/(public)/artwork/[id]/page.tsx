@@ -1,13 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { artworks, getArtwork } from "@/data/artwork";
+import { artworks } from "@/lib/store";
+import type { Artwork } from "@/data/types";
 import ArtworkImage from "@/components/ArtworkImage";
 
-export function generateStaticParams() {
-  return artworks.map((a) => ({ id: a.id }));
-}
-
-function Metadata({ artwork }: { artwork: ReturnType<typeof getArtwork> & object }) {
+function Metadata({ artwork }: { artwork: Artwork }) {
   return (
     <div>
       <h1 className="text-2xl font-medium">{artwork.title}</h1>
@@ -50,6 +47,21 @@ function Metadata({ artwork }: { artwork: ReturnType<typeof getArtwork> & object
           ))}
         </div>
       )}
+      {artwork.reference && (
+        <div className="mt-6 pt-4 border-t border-neutral-200 text-sm text-neutral-600">
+          <p>{artwork.reference.caption}</p>
+          {artwork.reference.url && (
+            <a
+              href={artwork.reference.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-neutral-900 transition-colors"
+            >
+              link
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -60,8 +72,8 @@ export default async function ArtworkPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const artwork = getArtwork(id);
-  if (!artwork) notFound();
+  const artwork = await artworks.get(id);
+  if (!artwork || artwork.status !== "live") notFound();
 
   const isLandscape = artwork.width > artwork.height;
 
@@ -75,7 +87,6 @@ export default async function ArtworkPage({
       </Link>
 
       {isLandscape ? (
-        // Landscape: full-width image, metadata below
         <div className="space-y-8">
           <ArtworkImage
             src={artwork.image}
@@ -86,7 +97,6 @@ export default async function ArtworkPage({
           <Metadata artwork={artwork} />
         </div>
       ) : (
-        // Portrait: image left, metadata right
         <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-12 items-start">
           <ArtworkImage
             src={artwork.image}

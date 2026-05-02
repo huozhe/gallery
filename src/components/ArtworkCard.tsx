@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import type { Artwork } from "@/data/artwork";
+import type { Artwork } from "@/data/types";
 
 export default function ArtworkCard({ artwork }: { artwork: Artwork }) {
   const isLandscape = artwork.width > artwork.height;
