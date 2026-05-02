@@ -10,10 +10,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <header className="flex items-center justify-between px-8 py-4 border-b border-neutral-200 bg-neutral-50">
         <div className="flex items-center gap-6">
           <Link href="/admin" className="text-sm font-medium tracking-tight">
-            Admin
+            Works
+          </Link>
+          <Link href="/admin/tags" className="text-sm text-neutral-600 hover:text-neutral-900">
+            Tags
           </Link>
           <Link href="/" className="text-sm text-neutral-600 hover:text-neutral-900">
-            View site
+            View site ↗
           </Link>
         </div>
         {session && (

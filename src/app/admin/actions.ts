@@ -303,6 +303,70 @@ export async function reorderArtworks(ids: string[]): Promise<void> {
   revalidatePath("/");
 }
 
+// ---------- tag mutations ----------
+
+const UpdateTagSchema = z.object({
+  id: z.string().min(1).max(40),
+  title: z.string().min(1).max(60),
+  note: z.string().optional(),
+  visible: z.boolean(),
+  isPrimaryRoom: z.boolean(),
+  order: z.number().int().min(0),
+});
+
+export type UpdateTagResult = { success: true } | { success: false; error: string };
+
+export async function updateTag(input: unknown): Promise<UpdateTagResult> {
+  await requireSession();
+  const parsed = UpdateTagSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validation error" };
+  const d = parsed.data;
+  const existing = await tags.get(d.id);
+  const now = new Date().toISOString();
+  await tags.upsert({
+    id: d.id,
+    title: d.title,
+    note: d.note || undefined,
+    visible: d.visible,
+    isPrimaryRoom: d.isPrimaryRoom,
+    order: d.order,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  });
+  await logAudit("tag.update", d.id, { title: { from: existing?.title, to: d.title } });
+  revalidatePath("/admin/tags");
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function deleteTag(id: string): Promise<void> {
+  await requireSession();
+  IdSchema.parse(id);
+  await tags.delete(id);
+  await logAudit("tag.delete", id);
+  revalidatePath("/admin/tags");
+  revalidatePath("/admin");
+  revalidatePath("/");
+}
+
+export async function reorderArtworksByTag(tagId: string, ids: string[]): Promise<void> {
+  await requireSession();
+  const parsed = IdsSchema.safeParse(ids);
+  if (!parsed.success) throw new Error("invalid ids");
+  for (let i = 0; i < parsed.data.length; i++) {
+    const work = await artworks.get(parsed.data[i]);
+    if (!work) continue;
+    if ((work.orderByTag[tagId] ?? -1) !== i) {
+      await artworks.upsert({ ...work, orderByTag: { ...work.orderByTag, [tagId]: i } });
+    }
+  }
+  await logAudit("artwork.update", `tag:${tagId}:reorder`);
+  revalidatePath("/admin/tags");
+  revalidatePath("/");
+}
+
+// ---------- artwork mutations ----------
+
 export async function softDeleteArtwork(id: string): Promise<void> {
   await requireSession();
   IdSchema.parse(id);
