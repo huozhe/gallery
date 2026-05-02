@@ -36,7 +36,7 @@ export default async function SignInPage({
             type="email"
             required
             autoComplete="email"
-            className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+            className="w-full border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-neutral-900"
           />
         </div>
         <div>
@@ -49,7 +49,7 @@ export default async function SignInPage({
             type="password"
             required
             autoComplete="current-password"
-            className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+            className="w-full border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-neutral-900"
           />
         </div>
         {next && <input type="hidden" name="next" value={next} />}
