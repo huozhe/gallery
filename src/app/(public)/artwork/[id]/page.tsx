@@ -1,9 +1,31 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { artworks } from "@/lib/store";
+import { artworks, tags } from "@/lib/store";
 import type { Artwork } from "@/data/types";
 import ArtworkImage from "@/components/ArtworkImage";
 import ReferenceImage from "@/components/ReferenceImage";
+
+function toRoman(n: number): string {
+  const map: [number, string][] = [
+    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
+  ];
+  let result = "";
+  let rem = n;
+  for (const [val, sym] of map) {
+    while (rem >= val) { result += sym; rem -= val; }
+  }
+  return result;
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-medium text-neutral-400 uppercase tracking-wide mb-3">
+      {children}
+    </p>
+  );
+}
 
 function Metadata({ artwork }: { artwork: Artwork }) {
   const ref = artwork.reference;
@@ -28,51 +50,57 @@ function Metadata({ artwork }: { artwork: Artwork }) {
       </dl>
 
       {artwork.description && (
-        <div className="mt-6 space-y-3 text-sm leading-relaxed text-neutral-700">
-          {artwork.description.split("\n").map((line, li) => (
-            <p key={li}>
-              {line.split(/(https?:\/\/\S+)/).map((part, i) =>
-                /^https?:\/\//.test(part) ? (
-                  <a
-                    key={i}
-                    href={part}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-neutral-900 transition-colors"
-                  >
-                    link
-                  </a>
-                ) : (
-                  part
-                )
-              )}
-            </p>
-          ))}
+        <div className="mt-8">
+          <SectionLabel>On the subject</SectionLabel>
+          <div className="space-y-3 text-sm leading-relaxed text-neutral-700">
+            {artwork.description.split("\n").map((line, li) => (
+              <p key={li}>
+                {line.split(/(https?:\/\/\S+)/).map((part, i) =>
+                  /^https?:\/\//.test(part) ? (
+                    <a
+                      key={i}
+                      href={part}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-neutral-900 transition-colors"
+                    >
+                      link
+                    </a>
+                  ) : (
+                    part
+                  )
+                )}
+              </p>
+            ))}
+          </div>
         </div>
       )}
 
       {ref && (
-        <div className="mt-6 pt-4 border-t border-neutral-200 text-sm text-neutral-600 space-y-3">
-          {ref.image && (
-            <ReferenceImage
-              src={ref.image}
-              alt={ref.caption}
-              width={ref.imageWidth ?? 800}
-              height={ref.imageHeight ?? 600}
-              caption={ref.caption}
-            />
-          )}
-          <p>{ref.caption}</p>
-          {ref.url && (
-            <a
-              href={ref.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-neutral-900 transition-colors"
-            >
-              link
-            </a>
-          )}
+        <div className="mt-8 pt-6 border-t border-neutral-200">
+          <SectionLabel>Reference</SectionLabel>
+          <div className="text-sm text-neutral-600 space-y-3">
+            {ref.image && (
+              <ReferenceImage
+                src={ref.image}
+                alt={ref.caption}
+                width={ref.imageWidth ?? 800}
+                height={ref.imageHeight ?? 600}
+                caption={ref.caption}
+              />
+            )}
+            <p>{ref.caption}</p>
+            {ref.url && (
+              <a
+                href={ref.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-neutral-900 transition-colors"
+              >
+                link ↗
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -85,19 +113,42 @@ export default async function ArtworkPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const artwork = await artworks.get(id);
+  const [artwork, allWorks, primaryTags] = await Promise.all([
+    artworks.get(id),
+    artworks.list({ status: "live" }),
+    tags.list({ visible: true, primaryRoom: true }),
+  ]);
   if (!artwork || artwork.status !== "live") notFound();
+
+  const roomIndex = primaryTags.findIndex((t) => artwork.tagIds.includes(t.id));
+  const roomTag = roomIndex !== -1 ? primaryTags[roomIndex] : null;
+  const roomWorks = roomTag
+    ? allWorks
+        .filter((w) => w.tagIds.includes(roomTag.id))
+        .sort((a, b) => (a.orderByTag[roomTag.id] ?? 999) - (b.orderByTag[roomTag.id] ?? 999))
+    : [];
+  const pos = roomWorks.findIndex((w) => w.id === id);
+  const prevWork = pos > 0 ? roomWorks[pos - 1] : null;
+  const nextWork = pos !== -1 && pos < roomWorks.length - 1 ? roomWorks[pos + 1] : null;
 
   const isLandscape = artwork.width > artwork.height;
 
   return (
     <main className="px-8 py-12 max-w-5xl mx-auto">
-      <Link
-        href="/"
-        className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors mb-10 inline-block"
-      >
-        ← Back
-      </Link>
+      {roomTag && pos !== -1 ? (
+        <p className="text-xs font-mono text-neutral-400 mb-10">
+          <Link
+            href={`/#room-${roomTag.id}`}
+            className="hover:text-neutral-600 transition-colors"
+          >
+            Room {toRoman(roomIndex + 1)} — {roomTag.title}
+          </Link>
+          {" · Plate "}
+          {String(pos + 1).padStart(2, "0")} / {String(roomWorks.length).padStart(2, "0")}
+        </p>
+      ) : (
+        <div className="mb-10" />
+      )}
 
       {isLandscape ? (
         <div className="space-y-8">
@@ -120,6 +171,35 @@ export default async function ArtworkPage({
           <Metadata artwork={artwork} />
         </div>
       )}
+
+      <nav className="mt-16 pt-6 border-t border-neutral-200 flex justify-between items-center text-sm">
+        {prevWork ? (
+          <Link
+            href={`/artwork/${prevWork.id}`}
+            className="text-neutral-500 hover:text-neutral-900 transition-colors"
+          >
+            ← Prev: {prevWork.title}
+          </Link>
+        ) : (
+          <span />
+        )}
+        <Link
+          href={roomTag ? `/#room-${roomTag.id}` : "/"}
+          className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors"
+        >
+          {roomTag ? `Room ${toRoman(roomIndex + 1)} — ${roomTag.title}` : "↑ Index"}
+        </Link>
+        {nextWork ? (
+          <Link
+            href={`/artwork/${nextWork.id}`}
+            className="text-neutral-500 hover:text-neutral-900 transition-colors"
+          >
+            Next: {nextWork.title} →
+          </Link>
+        ) : (
+          <span />
+        )}
+      </nav>
     </main>
   );
 }
