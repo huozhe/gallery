@@ -5,7 +5,7 @@
 import * as fileStore from "./store.file";
 import * as kvStore from "./store.kv";
 
-const impl = process.env.KV_REST_API_URL ? kvStore : fileStore;
+const impl = process.env.REDIS_URL ? kvStore : fileStore;
 
 export const artworks = impl.artworks;
 export const tags = impl.tags;

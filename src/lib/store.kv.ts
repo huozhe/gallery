@@ -1,7 +1,8 @@
-// Vercel KV + Blob store. Used in production when KV_REST_API_URL is set.
+// Vercel Redis (marketplace) + Blob store.
+// Used in production when REDIS_URL is set.
 // Exported surface is identical to store.file.ts — callers are unaffected.
 
-import { kv } from "@vercel/kv";
+import Redis from "ioredis";
 import { put } from "@vercel/blob";
 import { ulid } from "ulid";
 import type {
@@ -13,10 +14,59 @@ import type {
   User,
 } from "@/data/types";
 import { seedAbout, seedArtworks, seedTags } from "@/data/seed";
-import { hashPassword } from "@/lib/auth";
 import { SESSION_TTL_SECONDS } from "@/lib/session-config";
 
 const AUDIT_CAP = 5000;
+
+// Reuse connection across requests (required for serverless warm instances).
+declare global {
+  // eslint-disable-next-line no-var
+  var _redisClient: Redis | undefined;
+}
+
+function getClient(): Redis {
+  if (!process.env.REDIS_URL) {
+    throw new Error("REDIS_URL is not set");
+  }
+  if (!globalThis._redisClient) {
+    globalThis._redisClient = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: false,
+      lazyConnect: true,
+    });
+  }
+  return globalThis._redisClient;
+}
+
+// ---------- JSON helpers ----------
+
+function ser(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+function de<T>(value: string | null): T | null {
+  if (value === null) return null;
+  try { return JSON.parse(value) as T; } catch { return null; }
+}
+
+async function get<T>(key: string): Promise<T | null> {
+  return de<T>(await getClient().get(key));
+}
+
+async function set(key: string, value: unknown, exSeconds?: number): Promise<void> {
+  const r = getClient();
+  if (exSeconds) {
+    await r.set(key, ser(value), "EX", exSeconds);
+  } else {
+    await r.set(key, ser(value));
+  }
+}
+
+async function mget<T>(keys: string[]): Promise<(T | null)[]> {
+  if (!keys.length) return [];
+  const raw = await getClient().mget(...keys);
+  return raw.map((v) => de<T>(v));
+}
 
 // ---------- seeding ----------
 
@@ -24,37 +74,37 @@ let seeded = false;
 
 async function ensureSeeded(): Promise<void> {
   if (seeded) return;
-  const count = await kv.scard("artworks:index");
+  const r = getClient();
+  const count = await r.scard("artworks:index");
   if (count === 0) {
-    // Tags
     for (const tag of seedTags) {
-      await kv.set(`tag:${tag.id}`, tag);
-      await kv.sadd("tags:index", tag.id);
+      await set(`tag:${tag.id}`, tag);
+      await r.sadd("tags:index", tag.id);
     }
-    // Artworks
     for (const art of seedArtworks) {
-      await kv.set(`artwork:${art.id}`, art);
-      await kv.sadd("artworks:index", art.id);
+      await set(`artwork:${art.id}`, art);
+      await r.sadd("artworks:index", art.id);
     }
-    // About
-    await kv.set("about:content", seedAbout);
-    // Admin user from env vars
-    const userCount = await kv.scard("users:index");
-    if (
-      userCount === 0 &&
-      process.env.GALLERY_ADMIN_EMAIL &&
-      process.env.GALLERY_ADMIN_PASSWORD
-    ) {
-      const passwordHash = await hashPassword(process.env.GALLERY_ADMIN_PASSWORD);
-      const user: User = {
-        id: ulid(),
-        email: process.env.GALLERY_ADMIN_EMAIL.toLowerCase(),
-        passwordHash,
-        createdAt: new Date().toISOString(),
-      };
-      await kv.set(`user:${user.email}`, user);
-      await kv.sadd("users:index", user.email);
-    }
+    await set("about:content", seedAbout);
+  }
+
+  // Admin user seeding is independent — runs even if artworks were already seeded
+  const userCount = await r.scard("users:index");
+  if (
+    userCount === 0 &&
+    process.env.GALLERY_ADMIN_EMAIL &&
+    process.env.GALLERY_ADMIN_PASSWORD
+  ) {
+    const { hashPassword } = await import("@/lib/auth");
+    const passwordHash = await hashPassword(process.env.GALLERY_ADMIN_PASSWORD);
+    const user: User = {
+      id: ulid(),
+      email: process.env.GALLERY_ADMIN_EMAIL.toLowerCase(),
+      passwordHash,
+      createdAt: new Date().toISOString(),
+    };
+    await set(`user:${user.email}`, user);
+    await r.sadd("users:index", user.email);
   }
   seeded = true;
 }
@@ -62,21 +112,22 @@ async function ensureSeeded(): Promise<void> {
 // ---------- seed (public, used by migrate script) ----------
 
 export async function seed(): Promise<{ tags: number; artworks: number }> {
+  const r = getClient();
   let addedTags = 0;
   let addedArtworks = 0;
   for (const tag of seedTags) {
-    const exists = await kv.exists(`tag:${tag.id}`);
+    const exists = await r.exists(`tag:${tag.id}`);
     if (!exists) {
-      await kv.set(`tag:${tag.id}`, tag);
-      await kv.sadd("tags:index", tag.id);
+      await set(`tag:${tag.id}`, tag);
+      await r.sadd("tags:index", tag.id);
       addedTags++;
     }
   }
   for (const art of seedArtworks) {
-    const exists = await kv.exists(`artwork:${art.id}`);
+    const exists = await r.exists(`artwork:${art.id}`);
     if (!exists) {
-      await kv.set(`artwork:${art.id}`, art);
-      await kv.sadd("artworks:index", art.id);
+      await set(`artwork:${art.id}`, art);
+      await r.sadd("artworks:index", art.id);
       addedArtworks++;
     }
   }
@@ -90,10 +141,12 @@ export const artworks = {
     opts: { status?: Artwork["status"]; trashed?: boolean; tagId?: string } = {}
   ): Promise<Artwork[]> {
     await ensureSeeded();
-    const ids = await kv.smembers<string[]>("artworks:index");
+    const r = getClient();
+    const ids = await r.smembers("artworks:index");
     if (!ids.length) return [];
-    const records = await kv.mget<Artwork[]>(...ids.map((id) => `artwork:${id}`));
-    let list = records.filter((r): r is Artwork => r !== null);
+    let list = (await mget<Artwork>(ids.map((id) => `artwork:${id}`))).filter(
+      (a): a is Artwork => a !== null
+    );
     if (opts.trashed) {
       list = list.filter((a) => a.status === "deleted");
     } else {
@@ -107,39 +160,41 @@ export const artworks = {
 
   async get(id: string): Promise<Artwork | null> {
     await ensureSeeded();
-    return kv.get<Artwork>(`artwork:${id}`);
+    return get<Artwork>(`artwork:${id}`);
   },
 
   async upsert(record: Artwork): Promise<Artwork> {
-    const existing = await kv.get<Artwork>(`artwork:${record.id}`);
+    const r = getClient();
+    const existing = await get<Artwork>(`artwork:${record.id}`);
     const now = new Date().toISOString();
     const next: Artwork = {
       ...record,
       createdAt: existing?.createdAt ?? record.createdAt ?? now,
       updatedAt: now,
     };
-    await kv.set(`artwork:${next.id}`, next);
-    await kv.sadd("artworks:index", next.id);
+    await set(`artwork:${next.id}`, next);
+    await r.sadd("artworks:index", next.id);
     return next;
   },
 
   async softDelete(id: string): Promise<void> {
-    const a = await kv.get<Artwork>(`artwork:${id}`);
+    const a = await get<Artwork>(`artwork:${id}`);
     if (!a) return;
     const now = new Date().toISOString();
-    await kv.set(`artwork:${id}`, { ...a, status: "deleted", deletedAt: now, updatedAt: now });
+    await set(`artwork:${id}`, { ...a, status: "deleted", deletedAt: now, updatedAt: now });
   },
 
   async restore(id: string): Promise<void> {
-    const a = await kv.get<Artwork>(`artwork:${id}`);
+    const a = await get<Artwork>(`artwork:${id}`);
     if (!a) return;
     const { deletedAt: _d, ...rest } = a;
-    await kv.set(`artwork:${id}`, { ...rest, status: "live", updatedAt: new Date().toISOString() });
+    await set(`artwork:${id}`, { ...rest, status: "live", updatedAt: new Date().toISOString() });
   },
 
   async purge(id: string): Promise<void> {
-    await kv.del(`artwork:${id}`);
-    await kv.srem("artworks:index", id);
+    const r = getClient();
+    await r.del(`artwork:${id}`);
+    await r.srem("artworks:index", id);
   },
 };
 
@@ -148,10 +203,12 @@ export const artworks = {
 export const tags = {
   async list(opts: { visible?: boolean; primaryRoom?: boolean } = {}): Promise<Tag[]> {
     await ensureSeeded();
-    const ids = await kv.smembers<string[]>("tags:index");
+    const r = getClient();
+    const ids = await r.smembers("tags:index");
     if (!ids.length) return [];
-    const records = await kv.mget<Tag[]>(...ids.map((id) => `tag:${id}`));
-    let list = records.filter((r): r is Tag => r !== null);
+    let list = (await mget<Tag>(ids.map((id) => `tag:${id}`))).filter(
+      (t): t is Tag => t !== null
+    );
     if (opts.visible !== undefined) list = list.filter((t) => t.visible === opts.visible);
     if (opts.primaryRoom !== undefined)
       list = list.filter((t) => t.isPrimaryRoom === opts.primaryRoom);
@@ -160,32 +217,33 @@ export const tags = {
   },
 
   async get(id: string): Promise<Tag | null> {
-    return kv.get<Tag>(`tag:${id}`);
+    return get<Tag>(`tag:${id}`);
   },
 
   async upsert(record: Tag): Promise<Tag> {
-    const existing = await kv.get<Tag>(`tag:${record.id}`);
+    const r = getClient();
+    const existing = await get<Tag>(`tag:${record.id}`);
     const now = new Date().toISOString();
     const next: Tag = {
       ...record,
       createdAt: existing?.createdAt ?? record.createdAt ?? now,
       updatedAt: now,
     };
-    await kv.set(`tag:${next.id}`, next);
-    await kv.sadd("tags:index", next.id);
+    await set(`tag:${next.id}`, next);
+    await r.sadd("tags:index", next.id);
     return next;
   },
 
   async delete(id: string): Promise<void> {
-    await kv.del(`tag:${id}`);
-    await kv.srem("tags:index", id);
-    // Remove tag from all artworks
-    const ids = await kv.smembers<string[]>("artworks:index");
+    const r = getClient();
+    await r.del(`tag:${id}`);
+    await r.srem("tags:index", id);
+    const ids = await r.smembers("artworks:index");
     for (const artId of ids) {
-      const a = await kv.get<Artwork>(`artwork:${artId}`);
+      const a = await get<Artwork>(`artwork:${artId}`);
       if (!a || !a.tagIds.includes(id)) continue;
       const { [id]: _removed, ...orderByTag } = a.orderByTag;
-      await kv.set(`artwork:${artId}`, {
+      await set(`artwork:${artId}`, {
         ...a,
         tagIds: a.tagIds.filter((t) => t !== id),
         orderByTag,
@@ -199,32 +257,40 @@ export const tags = {
 
 export const users = {
   async list(): Promise<User[]> {
-    const emails = await kv.smembers<string[]>("users:index");
+    await ensureSeeded();
+    const r = getClient();
+    const emails = await r.smembers("users:index");
     if (!emails.length) return [];
-    const records = await kv.mget<User[]>(...emails.map((e) => `user:${e}`));
-    return records.filter((r): r is User => r !== null);
+    return (await mget<User>(emails.map((e) => `user:${e}`))).filter(
+      (u): u is User => u !== null
+    );
   },
 
   async getByEmail(email: string): Promise<User | null> {
-    return kv.get<User>(`user:${email.toLowerCase()}`);
+    await ensureSeeded();
+    return get<User>(`user:${email.toLowerCase()}`);
   },
 
   async getById(id: string): Promise<User | null> {
-    const emails = await kv.smembers<string[]>("users:index");
+    await ensureSeeded();
+    const r = getClient();
+    const emails = await r.smembers("users:index");
     if (!emails.length) return null;
-    const records = await kv.mget<User[]>(...emails.map((e) => `user:${e}`));
-    return records.find((r): r is User => r !== null && r.id === id) ?? null;
+    const records = await mget<User>(emails.map((e) => `user:${e}`));
+    return records.find((u): u is User => u !== null && u.id === id) ?? null;
   },
 
   async upsert(record: User): Promise<User> {
-    await kv.set(`user:${record.email.toLowerCase()}`, record);
-    await kv.sadd("users:index", record.email.toLowerCase());
+    const r = getClient();
+    await set(`user:${record.email.toLowerCase()}`, record);
+    await r.sadd("users:index", record.email.toLowerCase());
     return record;
   },
 
   async delete(email: string): Promise<void> {
-    await kv.del(`user:${email.toLowerCase()}`);
-    await kv.srem("users:index", email.toLowerCase());
+    const r = getClient();
+    await r.del(`user:${email.toLowerCase()}`);
+    await r.srem("users:index", email.toLowerCase());
   },
 };
 
@@ -232,22 +298,23 @@ export const users = {
 
 export const sessions = {
   async get(tokenHash: string): Promise<Session | null> {
-    const s = await kv.get<Session>(`session:${tokenHash}`);
+    await ensureSeeded();
+    const s = await get<Session>(`session:${tokenHash}`);
     if (!s) return null;
     if (new Date(s.expiresAt).getTime() < Date.now()) {
-      await kv.del(`session:${tokenHash}`);
+      await getClient().del(`session:${tokenHash}`);
       return null;
     }
     return s;
   },
 
   async upsert(tokenHash: string, record: Session): Promise<Session> {
-    await kv.set(`session:${tokenHash}`, record, { ex: SESSION_TTL_SECONDS });
+    await set(`session:${tokenHash}`, record, SESSION_TTL_SECONDS);
     return record;
   },
 
   async delete(tokenHash: string): Promise<void> {
-    await kv.del(`session:${tokenHash}`);
+    await getClient().del(`session:${tokenHash}`);
   },
 };
 
@@ -255,13 +322,14 @@ export const sessions = {
 
 export const audit = {
   async log(entry: AuditEntry): Promise<void> {
-    await kv.lpush("audit:log", entry);
-    await kv.ltrim("audit:log", 0, AUDIT_CAP - 1);
+    const r = getClient();
+    await r.lpush("audit:log", ser(entry));
+    await r.ltrim("audit:log", 0, AUDIT_CAP - 1);
   },
 
   async list(limit = 200): Promise<AuditEntry[]> {
-    const raw = await kv.lrange<AuditEntry>("audit:log", 0, limit - 1);
-    return raw;
+    const raw = await getClient().lrange("audit:log", 0, limit - 1);
+    return raw.map((v) => de<AuditEntry>(v)).filter((e): e is AuditEntry => e !== null);
   },
 };
 
@@ -269,12 +337,11 @@ export const audit = {
 
 export const about = {
   async get(): Promise<AboutContent> {
-    const stored = await kv.get<AboutContent>("about:content");
-    return stored ?? seedAbout;
+    return (await get<AboutContent>("about:content")) ?? seedAbout;
   },
 
   async set(content: AboutContent): Promise<AboutContent> {
-    await kv.set("about:content", content);
+    await set("about:content", content);
     return content;
   },
 };

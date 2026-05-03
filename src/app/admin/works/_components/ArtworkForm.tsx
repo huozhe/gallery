@@ -195,7 +195,7 @@ export default function ArtworkForm(props: Props) {
           <div className="flex gap-4 items-start">
             {form.image && (
               <div className="relative w-24 h-24 bg-neutral-100 overflow-hidden shrink-0">
-                <Image src={form.image} alt="Current" fill className="object-cover" />
+                <Image src={form.image} alt="Current" fill sizes="96px" className="object-cover" />
               </div>
             )}
             <div>
@@ -338,7 +338,7 @@ export default function ArtworkForm(props: Props) {
               <div className="flex gap-4 items-start">
                 {referenceImage.path && (
                   <div className="relative w-20 h-20 bg-neutral-100 overflow-hidden shrink-0">
-                    <Image src={referenceImage.path} alt="Reference" fill className="object-cover" />
+                    <Image src={referenceImage.path} alt="Reference" fill sizes="80px" className="object-cover" />
                   </div>
                 )}
                 <div>
