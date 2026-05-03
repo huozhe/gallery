@@ -1,4 +1,4 @@
-import type { Artwork, Tag } from "./types";
+import type { AboutContent, Artwork, Tag } from "./types";
 
 const NOW = "2026-04-01T00:00:00Z";
 
@@ -31,6 +31,12 @@ export const seedTags: Tag[] = [
     updatedAt: NOW,
   },
 ];
+
+export const seedAbout: AboutContent = {
+  bio: "I paint and draw for the pleasure of looking closely at things.\n\nBased in the Bay Area, Northern California. Available for commissions and inquiries.",
+  email: "artist@example.com",
+  updatedAt: NOW,
+};
 
 export const seedArtworks: Artwork[] = [
   {

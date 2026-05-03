@@ -13,13 +13,14 @@
 import { promises as fs } from "fs";
 import path from "path";
 import type {
+  AboutContent,
   Artwork,
   AuditEntry,
   Session,
   Tag,
   User,
 } from "@/data/types";
-import { seedArtworks, seedTags } from "@/data/seed";
+import { seedAbout, seedArtworks, seedTags } from "@/data/seed";
 
 type StoreData = {
   artworks: Record<string, Artwork>;
@@ -27,6 +28,7 @@ type StoreData = {
   users: Record<string, User>; // keyed by lowercased email
   sessions: Record<string, Session>; // keyed by token hash
   audit: AuditEntry[]; // newest-first, capped
+  about?: AboutContent;
 };
 
 const DATA_FILE = path.join(process.cwd(), ".data", "store.json");
@@ -286,6 +288,21 @@ export const audit = {
   async list(limit = 200): Promise<AuditEntry[]> {
     const data = await readFile();
     return data.audit.slice(0, limit);
+  },
+};
+
+// ---------- about ----------
+export const about = {
+  async get(): Promise<AboutContent> {
+    const data = await load();
+    return data.about ?? seedAbout;
+  },
+
+  async set(content: AboutContent): Promise<AboutContent> {
+    return update((data) => {
+      data.about = content;
+      return content;
+    });
   },
 };
 

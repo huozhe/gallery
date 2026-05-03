@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { ulid } from "ulid";
 import { z } from "zod";
-import { artworks, audit, sessions, tags, users } from "@/lib/store";
+import { about, artworks, audit, sessions, tags, users } from "@/lib/store";
 import type { AuditAction } from "@/data/types";
 import {
   SESSION_COOKIE,
@@ -410,4 +410,25 @@ export async function purgeArtwork(id: string): Promise<void> {
   });
   revalidatePath("/admin");
   revalidatePath("/");
+}
+
+// ---------- about ----------
+
+const UpdateAboutSchema = z.object({
+  bio: z.string().max(5000),
+  email: z.string().email().max(120),
+});
+
+export type UpdateAboutResult = { success: true } | { success: false; error: string };
+
+export async function updateAbout(input: unknown): Promise<UpdateAboutResult> {
+  await requireSession();
+  const parsed = UpdateAboutSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validation error" };
+  const d = parsed.data;
+  await about.set({ bio: d.bio, email: d.email, updatedAt: new Date().toISOString() });
+  await logAudit("about.update", "about", { email: { from: null, to: d.email } });
+  revalidatePath("/about");
+  revalidatePath("/admin/about");
+  return { success: true };
 }

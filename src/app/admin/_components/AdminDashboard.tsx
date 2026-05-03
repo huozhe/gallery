@@ -213,9 +213,6 @@ export default function AdminDashboard({
         )}
       </div>
 
-      <p className="mt-6 text-xs text-neutral-400">
-        Edit form (step 6) and tag manager (step 7) not built yet — Edit links will 404.
-      </p>
     </main>
   );
 }

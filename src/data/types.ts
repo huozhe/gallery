@@ -57,6 +57,12 @@ export type Session = {
   ip?: string;
 };
 
+export type AboutContent = {
+  bio: string;
+  email: string;
+  updatedAt: string;
+};
+
 export type AuditAction =
   | "artwork.create"
   | "artwork.update"
