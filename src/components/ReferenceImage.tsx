@@ -72,30 +72,30 @@ export default function ReferenceImage({ src, alt, width, height, caption }: Pro
       {/* Draggable, resizable floating panel */}
       {open && (
         <div
-          style={{ left: pos.x, top: pos.y, width: 380, height: 340, minWidth: 180, minHeight: 140 }}
-          className="fixed z-50 flex flex-col bg-white border border-neutral-300 shadow-2xl select-none overflow-hidden resize"
+          style={{ left: pos.x, top: pos.y, width: 380, minWidth: 180 }}
+          className="fixed z-50 flex flex-col bg-neutral-900 border border-neutral-700 shadow-2xl select-none overflow-hidden resize-x"
         >
           {/* Title bar — drag handle */}
           <div
-            className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 bg-neutral-100 border-b border-neutral-200 cursor-grab active:cursor-grabbing"
+            className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 bg-neutral-800 border-b border-neutral-700 cursor-grab active:cursor-grabbing"
             onPointerDown={startDrag}
             onPointerMove={onDrag}
             onPointerUp={stopDrag}
             onPointerCancel={stopDrag}
           >
-            <span className="text-xs text-neutral-500 truncate">Reference — {caption}</span>
+            <span className="text-xs text-neutral-400 truncate">Reference — {caption}</span>
             <button
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => setOpen(false)}
-              className="shrink-0 text-neutral-400 hover:text-neutral-800 text-lg leading-none"
+              className="shrink-0 text-neutral-500 hover:text-neutral-100 text-lg leading-none"
               aria-label="Close"
             >
               ×
             </button>
           </div>
 
-          {/* Image fills remaining space via fill layout */}
-          <div className="relative flex-1 min-h-0 overflow-hidden">
+          {/* Image: height auto-derives from width via aspect-ratio — no empty edges */}
+          <div className="relative w-full" style={{ aspectRatio: `${width} / ${height}` }}>
             <Image
               src={src}
               alt={alt}
