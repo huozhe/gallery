@@ -317,6 +317,7 @@ function SortableRow({
     <button
       {...attributes}
       {...listeners}
+      suppressHydrationWarning
       className="cursor-grab active:cursor-grabbing text-neutral-400 hover:text-neutral-700"
       aria-label="Reorder"
     >
