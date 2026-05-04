@@ -18,22 +18,46 @@ import { SESSION_TTL_SECONDS } from "@/lib/session-config";
 
 const AUDIT_CAP = 5000;
 
+// Wraps ioredis and prepends REDIS_KEY_PREFIX to every key automatically.
+// All code uses PrefixedRedis — raw string keys can never bypass the prefix.
+const PREFIX = process.env.REDIS_KEY_PREFIX ?? "";
+
+class PrefixedRedis {
+  constructor(private r: Redis) {}
+  private k(key: string) { return `${PREFIX}${key}`; }
+
+  get(key: string)                                        { return this.r.get(this.k(key)); }
+  set(key: string, val: string)                           { return this.r.set(this.k(key), val); }
+  setex(key: string, seconds: number, val: string)        { return this.r.setex(this.k(key), seconds, val); }
+  del(key: string)                                        { return this.r.del(this.k(key)); }
+  exists(key: string)                                     { return this.r.exists(this.k(key)); }
+  sadd(key: string, ...members: string[])                 { return this.r.sadd(this.k(key), ...members); }
+  srem(key: string, ...members: string[])                 { return this.r.srem(this.k(key), ...members); }
+  scard(key: string)                                      { return this.r.scard(this.k(key)); }
+  smembers(key: string)                                   { return this.r.smembers(this.k(key)); }
+  mget(...keys: string[])                                 { return this.r.mget(...keys.map(k => this.k(k))); }
+  lpush(key: string, ...values: string[])                 { return this.r.lpush(this.k(key), ...values); }
+  ltrim(key: string, start: number, stop: number)         { return this.r.ltrim(this.k(key), start, stop); }
+  lrange(key: string, start: number, stop: number)        { return this.r.lrange(this.k(key), start, stop); }
+}
+
 // Reuse connection across requests (required for serverless warm instances).
 declare global {
   // eslint-disable-next-line no-var
-  var _redisClient: Redis | undefined;
+  var _redisClient: PrefixedRedis | undefined;
 }
 
-function getClient(): Redis {
+function getClient(): PrefixedRedis {
   if (!process.env.REDIS_URL) {
     throw new Error("REDIS_URL is not set");
   }
   if (!globalThis._redisClient) {
-    globalThis._redisClient = new Redis(process.env.REDIS_URL, {
+    const raw = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 3,
       enableReadyCheck: false,
       lazyConnect: true,
     });
+    globalThis._redisClient = new PrefixedRedis(raw);
   }
   return globalThis._redisClient;
 }
@@ -56,7 +80,7 @@ async function get<T>(key: string): Promise<T | null> {
 async function set(key: string, value: unknown, exSeconds?: number): Promise<void> {
   const r = getClient();
   if (exSeconds) {
-    await r.set(key, ser(value), "EX", exSeconds);
+    await r.setex(key, exSeconds, ser(value));
   } else {
     await r.set(key, ser(value));
   }
