@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Artwork } from "@/data/types";
 
-export default function ArtworkCard({ artwork }: { artwork: Artwork }) {
+export default function ArtworkCard({ artwork, priority = false }: { artwork: Artwork; priority?: boolean }) {
   const isLandscape = artwork.width > artwork.height;
 
   return (
@@ -13,6 +13,7 @@ export default function ArtworkCard({ artwork }: { artwork: Artwork }) {
           alt={artwork.title}
           width={artwork.width}
           height={artwork.height}
+          priority={priority}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
       </div>
