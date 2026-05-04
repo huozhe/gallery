@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     // Production: upload to Vercel Blob
     const { put } = await import("@vercel/blob");
-    const { url } = await put(`${dir}/${safeName}`, file, { access: "public" });
+    const { url } = await put(`${dir}/${safeName}`, file, { access: "public", allowOverwrite: true });
     return Response.json({ path: url, width, height });
   } else {
     // Local dev: write to public/ on disk
