@@ -184,8 +184,9 @@ export default function AdminDashboard({
         </p>
       )}
 
-      <div className="border border-neutral-200">
-        <div className="grid grid-cols-[24px_72px_1fr_140px_60px_1fr_80px_180px] gap-3 px-3 py-2 text-xs uppercase tracking-wide text-neutral-500 border-b border-neutral-200 bg-neutral-50 [color-scheme:light]">
+      <div className="overflow-x-auto">
+      <div className="border border-neutral-200 min-w-[860px]">
+        <div className="grid grid-cols-[24px_72px_1fr_120px_56px_160px_76px_160px] gap-3 px-3 py-2 text-xs uppercase tracking-wide text-neutral-500 border-b border-neutral-200 bg-neutral-50 [color-scheme:light]">
           <div></div>
           <div></div>
           <div>Title</div>
@@ -212,6 +213,7 @@ export default function AdminDashboard({
           filtered.map((w) => <Row key={w.id} work={w} tagById={tagById} view={view} />)
         )}
       </div>
+      </div>
 
     </main>
   );
@@ -236,7 +238,7 @@ function Row({
     <div
       ref={setNodeRef}
       style={style}
-      className="grid grid-cols-[24px_72px_1fr_140px_60px_1fr_80px_180px] gap-3 px-3 py-2 items-center text-sm text-neutral-900 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 bg-white"
+      className="grid grid-cols-[24px_72px_1fr_120px_56px_160px_76px_160px] gap-3 px-3 py-2 items-center text-sm text-neutral-900 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 bg-white"
     >
       <div className="text-neutral-400">{dragHandle}</div>
       <div className="relative w-[60px] h-[60px] bg-neutral-100 overflow-hidden">
@@ -248,27 +250,32 @@ function Row({
           className="object-cover"
         />
       </div>
-      <div>
+      <div className="min-w-0">
         <div className="font-medium truncate">{work.title}</div>
         <div className="text-xs text-neutral-500 truncate">{work.id}</div>
       </div>
-      <div className="text-neutral-700 truncate">{work.medium}</div>
+      <div className="text-neutral-700 truncate min-w-0">{work.medium}</div>
       <div className="text-neutral-700">{work.year}</div>
       <div className="flex flex-wrap gap-1">
         {work.tagIds.length === 0 ? (
           <span className="text-xs text-neutral-400 italic">untagged</span>
         ) : (
-          work.tagIds.map((tid) => {
-            const t = tagById.get(tid);
-            return (
-              <span
-                key={tid}
-                className="text-xs px-1.5 py-0.5 bg-neutral-100 border border-neutral-200 text-neutral-700"
-              >
-                {t?.title ?? tid}
-              </span>
-            );
-          })
+          <>
+            {work.tagIds.slice(0, 2).map((tid) => {
+              const t = tagById.get(tid);
+              return (
+                <span
+                  key={tid}
+                  className="text-xs px-1.5 py-0.5 bg-neutral-100 border border-neutral-200 text-neutral-700 whitespace-nowrap"
+                >
+                  {t?.title ?? tid}
+                </span>
+              );
+            })}
+            {work.tagIds.length > 2 && (
+              <span className="text-xs text-neutral-400">+{work.tagIds.length - 2}</span>
+            )}
+          </>
         )}
       </div>
       <div>
