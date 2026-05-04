@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
+npm test         # Vitest (70 tests); npx vitest run --coverage for coverage report
 ```
 
 ## Architecture
@@ -53,6 +54,10 @@ Session cookie (`gallery_session`) holds a 32-byte random hex token; stored *has
 - **Production / dev with Blob**: uploads to Vercel Blob at `{BLOB_PATH_PREFIX}{dir}/{safeName}`. The full Blob URL is stored on the artwork record. `BLOB_PATH_PREFIX` (e.g. `dev/`) isolates dev uploads from prod within a shared Blob store.
 
 `next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`. To add another external image host, extend that list.
+
+### Tests
+
+Vitest test suite lives in `src/test/`. Run with `npm test`. GitHub Actions CI (`.github/workflows/ci.yml`) runs tests + build on every push/PR to main. Mock pattern: declare `const mockXxx = vi.fn()` at module top level before `vi.mock(factory)` — the factory closure captures them lazily and they are initialized by the time it runs.
 
 ### Environment isolation
 
