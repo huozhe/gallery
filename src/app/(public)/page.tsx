@@ -34,9 +34,6 @@ export default async function Home() {
     <main className="px-8 py-12">
       {rooms.length > 1 && (
         <div className="flex flex-wrap gap-2 mb-10">
-          <span className="text-xs px-3 py-1 rounded-full border border-neutral-300 text-neutral-600">
-            All
-          </span>
           {rooms.map(({ tag, works }) => (
             <a
               key={tag.id}
