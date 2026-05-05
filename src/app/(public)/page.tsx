@@ -59,7 +59,7 @@ export default async function Home() {
           {tag.note && (
             <p className="text-sm text-neutral-500 -mt-2 mb-6">{tag.note}</p>
           )}
-          <GalleryGrid artworks={works} />
+          <GalleryGrid artworks={works} priorityCount={i === 0 ? 3 : 1} />
         </section>
       ))}
 
