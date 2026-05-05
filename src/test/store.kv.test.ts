@@ -5,11 +5,13 @@ const store: Record<string, string> = {};
 const sets: Record<string, Set<string>> = {};
 const lists: Record<string, string[]> = {};
 
+const hashes: Record<string, Record<string, string>> = {};
+
 const redisMock = {
   get: vi.fn((k: string) => Promise.resolve(store[k] ?? null)),
   set: vi.fn((k: string, v: string) => { store[k] = v; return Promise.resolve("OK"); }),
   setex: vi.fn((k: string, _s: number, v: string) => { store[k] = v; return Promise.resolve("OK"); }),
-  del: vi.fn((k: string) => { const had = k in store || k in sets || k in lists; delete store[k]; delete sets[k]; delete lists[k]; return Promise.resolve(had ? 1 : 0); }),
+  del: vi.fn((k: string) => { const had = k in store || k in sets || k in lists || k in hashes; delete store[k]; delete sets[k]; delete lists[k]; delete hashes[k]; return Promise.resolve(had ? 1 : 0); }),
   exists: vi.fn((k: string) => Promise.resolve(k in store ? 1 : 0)),
   sadd: vi.fn((k: string, ...members: string[]) => { if (!sets[k]) sets[k] = new Set(); members.forEach(m => sets[k].add(m)); return Promise.resolve(members.length); }),
   srem: vi.fn((k: string, ...members: string[]) => { members.forEach(m => sets[k]?.delete(m)); return Promise.resolve(members.length); }),
@@ -19,6 +21,10 @@ const redisMock = {
   lpush: vi.fn((k: string, ...vals: string[]) => { if (!lists[k]) lists[k] = []; vals.forEach(v => lists[k].unshift(v)); return Promise.resolve(lists[k].length); }),
   ltrim: vi.fn((k: string, start: number, stop: number) => { if (lists[k]) lists[k] = lists[k].slice(start, stop + 1); return Promise.resolve("OK"); }),
   lrange: vi.fn((k: string, start: number, stop: number) => Promise.resolve((lists[k] ?? []).slice(start, stop === -1 ? undefined : stop + 1))),
+  incr: vi.fn((k: string) => { const n = parseInt(store[k] ?? "0", 10) + 1; store[k] = String(n); return Promise.resolve(n); }),
+  hset: vi.fn((k: string, field: string, value: string) => { if (!hashes[k]) hashes[k] = {}; hashes[k][field] = value; return Promise.resolve(1); }),
+  hget: vi.fn((k: string, field: string) => Promise.resolve(hashes[k]?.[field] ?? null)),
+  hdel: vi.fn((k: string, field: string) => { const had = !!hashes[k]?.[field]; delete hashes[k]?.[field]; return Promise.resolve(had ? 1 : 0); }),
 };
 
 vi.mock("ioredis", () => ({
@@ -46,6 +52,7 @@ function clearAll() {
   for (const k of Object.keys(store)) delete store[k];
   for (const k of Object.keys(sets)) delete sets[k];
   for (const k of Object.keys(lists)) delete lists[k];
+  for (const k of Object.keys(hashes)) delete hashes[k];
   // Reset seeded flag by deleting the module cache is not possible in Vitest easily,
   // so we ensure artworks index is empty to trigger re-seed checks.
 }
@@ -61,7 +68,8 @@ const BASE_TAG = {
 };
 
 const BASE_ARTWORK = {
-  id: "work-1",
+  id: 1,
+  slug: "work-1",
   title: "Test Work",
   year: 2024,
   medium: "Oil",
@@ -81,42 +89,48 @@ describe("artworks", () => {
 
   it("upserts and retrieves an artwork", async () => {
     await artworks.upsert(BASE_ARTWORK);
-    const found = await artworks.get("work-1");
+    const found = await artworks.get(1);
+    expect(found?.title).toBe("Test Work");
+  });
+
+  it("retrieves an artwork by slug", async () => {
+    await artworks.upsert(BASE_ARTWORK);
+    const found = await artworks.getBySlug("work-1");
     expect(found?.title).toBe("Test Work");
   });
 
   it("lists only non-deleted artworks by default", async () => {
     await artworks.upsert(BASE_ARTWORK);
-    await artworks.upsert({ ...BASE_ARTWORK, id: "work-2", status: "deleted", orderGlobal: 1 });
+    await artworks.upsert({ ...BASE_ARTWORK, id: 2, slug: "work-2", status: "deleted", orderGlobal: 1 });
     const list = await artworks.list();
-    expect(list.map(a => a.id)).not.toContain("work-2");
+    expect(list.map(a => a.slug)).not.toContain("work-2");
   });
 
   it("lists trashed artworks", async () => {
     await artworks.upsert({ ...BASE_ARTWORK, status: "deleted" });
     const list = await artworks.list({ trashed: true });
-    expect(list[0].id).toBe("work-1");
+    expect(list[0].slug).toBe("work-1");
   });
 
   it("soft-deletes an artwork", async () => {
     await artworks.upsert(BASE_ARTWORK);
-    await artworks.softDelete("work-1");
-    const found = await artworks.get("work-1");
+    await artworks.softDelete(1);
+    const found = await artworks.get(1);
     expect(found?.status).toBe("deleted");
   });
 
   it("restores a soft-deleted artwork", async () => {
     await artworks.upsert({ ...BASE_ARTWORK, status: "deleted" });
-    await artworks.restore("work-1");
-    const found = await artworks.get("work-1");
+    await artworks.restore(1);
+    const found = await artworks.get(1);
     expect(found?.status).toBe("live");
     expect(found?.deletedAt).toBeUndefined();
   });
 
   it("purges an artwork", async () => {
     await artworks.upsert(BASE_ARTWORK);
-    await artworks.purge("work-1");
-    expect(await artworks.get("work-1")).toBeNull();
+    await artworks.purge(1);
+    expect(await artworks.get(1)).toBeNull();
   });
 });
 
@@ -141,7 +155,7 @@ describe("tags", () => {
     await artworks.upsert(BASE_ARTWORK);
     await tags.delete("paintings");
     expect(await tags.get("paintings")).toBeNull();
-    const work = await artworks.get("work-1");
+    const work = await artworks.get(1);
     expect(work?.tagIds).not.toContain("paintings");
   });
 });

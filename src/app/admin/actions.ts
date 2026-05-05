@@ -27,7 +27,8 @@ const SignInSchema = z.object({
 });
 
 const IdSchema = z.string().min(1).max(80);
-const IdsSchema = z.array(IdSchema).min(1);
+const NumericIdSchema = z.number().int().positive();
+const NumericIdsSchema = z.array(NumericIdSchema).min(1);
 
 function safeNext(next: string | undefined): string {
   if (!next || !next.startsWith("/admin") || next.startsWith("/admin/sign-in")) {
@@ -162,11 +163,12 @@ export async function signOut(): Promise<void> {
 // ---------- artwork save / create ----------
 
 const SaveArtworkSchema = z.object({
-  id: z
+  id: z.number().int().min(0),
+  slug: z
     .string()
     .min(1)
     .max(80)
-    .regex(/^[a-zA-Z0-9-]+$/, "ID must contain only letters, numbers, and hyphens"),
+    .regex(/^[a-zA-Z0-9-]+$/, "Slug must contain only letters, numbers, and hyphens"),
   title: z.string().min(1, "Title required").max(120),
   year: z.number().int().min(1800).max(new Date().getFullYear() + 1),
   medium: z.string().min(1, "Medium required"),
@@ -195,7 +197,7 @@ const SaveArtworkSchema = z.object({
 
 export type SaveArtworkInput = z.input<typeof SaveArtworkSchema>;
 export type SaveArtworkResult =
-  | { success: true; id: string }
+  | { success: true; id: number; slug: string }
   | { success: false; error: string };
 
 export async function saveArtwork(input: unknown): Promise<SaveArtworkResult> {
@@ -206,14 +208,23 @@ export async function saveArtwork(input: unknown): Promise<SaveArtworkResult> {
   }
   const d = parsed.data;
 
+  let artworkId: number;
   if (d.isNew) {
-    const existing = await artworks.get(d.id);
-    if (existing) return { success: false, error: `ID "${d.id}" already exists` };
+    const existing = await artworks.getBySlug(d.slug);
+    if (existing) return { success: false, error: `Slug "${d.slug}" already exists` };
+    artworkId = await artworks.nextId();
+  } else {
+    artworkId = d.id;
+    const existing = await artworks.getBySlug(d.slug);
+    if (existing && existing.id !== artworkId) {
+      return { success: false, error: `Slug "${d.slug}" already exists` };
+    }
   }
 
   const now = new Date().toISOString();
   await artworks.upsert({
-    id: d.id,
+    id: artworkId,
+    slug: d.slug,
     title: d.title,
     year: d.year,
     medium: d.medium,
@@ -232,14 +243,14 @@ export async function saveArtwork(input: unknown): Promise<SaveArtworkResult> {
     updatedAt: now,
   });
 
-  await logAudit(d.isNew ? "artwork.create" : "artwork.update", d.id, {
+  await logAudit(d.isNew ? "artwork.create" : "artwork.update", d.slug, {
     title: { from: null, to: d.title },
     status: { from: null, to: d.status },
   });
   revalidatePath("/admin");
   revalidatePath("/");
-  revalidatePath(`/artwork/${d.id}`);
-  return { success: true, id: d.id };
+  revalidatePath(`/artwork/${d.slug}`);
+  return { success: true, id: artworkId, slug: d.slug };
 }
 
 const CreateTagSchema = z.object({
@@ -286,9 +297,9 @@ export async function createTag(title: string, id: string): Promise<CreateTagRes
  * Reassign orderGlobal across all artworks in `ids` so the new order matches
  * the order they appear in the array.
  */
-export async function reorderArtworks(ids: string[]): Promise<void> {
+export async function reorderArtworks(ids: number[]): Promise<void> {
   await requireSession();
-  const parsed = IdsSchema.safeParse(ids);
+  const parsed = NumericIdsSchema.safeParse(ids);
   if (!parsed.success) throw new Error("invalid ids");
 
   const before = await artworks.list();
@@ -357,9 +368,9 @@ export async function deleteTag(id: string): Promise<void> {
   revalidatePath("/");
 }
 
-export async function reorderArtworksByTag(tagId: string, ids: string[]): Promise<void> {
+export async function reorderArtworksByTag(tagId: string, ids: number[]): Promise<void> {
   await requireSession();
-  const parsed = IdsSchema.safeParse(ids);
+  const parsed = NumericIdsSchema.safeParse(ids);
   if (!parsed.success) throw new Error("invalid ids");
   for (let i = 0; i < parsed.data.length; i++) {
     const work = await artworks.get(parsed.data[i]);
@@ -375,39 +386,39 @@ export async function reorderArtworksByTag(tagId: string, ids: string[]): Promis
 
 // ---------- artwork mutations ----------
 
-export async function softDeleteArtwork(id: string): Promise<void> {
+export async function softDeleteArtwork(id: number): Promise<void> {
   await requireSession();
-  IdSchema.parse(id);
+  NumericIdSchema.parse(id);
   const before = await artworks.get(id);
   if (!before) return;
   await artworks.softDelete(id);
-  await logAudit("artwork.delete", id, {
+  await logAudit("artwork.delete", before.slug, {
     status: { from: before.status, to: "deleted" },
   });
   revalidatePath("/admin");
   revalidatePath("/");
 }
 
-export async function restoreArtwork(id: string): Promise<void> {
+export async function restoreArtwork(id: number): Promise<void> {
   await requireSession();
-  IdSchema.parse(id);
+  NumericIdSchema.parse(id);
   const before = await artworks.get(id);
   if (!before) return;
   await artworks.restore(id);
-  await logAudit("artwork.restore", id, {
+  await logAudit("artwork.restore", before.slug, {
     status: { from: before.status, to: "live" },
   });
   revalidatePath("/admin");
   revalidatePath("/");
 }
 
-export async function purgeArtwork(id: string): Promise<void> {
+export async function purgeArtwork(id: number): Promise<void> {
   await requireSession();
-  IdSchema.parse(id);
+  NumericIdSchema.parse(id);
   const before = await artworks.get(id);
   if (!before) return;
   await artworks.purge(id);
-  await logAudit("artwork.purge", id, {
+  await logAudit("artwork.purge", before.slug, {
     deleted: { from: { id: before.id, title: before.title }, to: null },
   });
   revalidatePath("/admin");

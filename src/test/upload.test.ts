@@ -68,14 +68,16 @@ describe("POST /api/admin/upload", () => {
     expect(res.status).toBe(400);
   });
 
+  const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
+
   it("writes WebP and original to disk in local dev mode", async () => {
     mockSessionsGet.mockResolvedValue({ id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 86400000).toISOString() });
     const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
     const res = await POST(makeRequest({ file, dir: "artwork", width: "800", height: "600" }));
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(body.path).toBe("/artwork/photo.webp");
-    expect(body.originalPath).toBe("/original/artwork/photo.jpg");
+    expect(body.path).toMatch(new RegExp(`^/artwork/${UUID_RE.source}\\.webp$`));
+    expect(body.originalPath).toMatch(new RegExp(`^/original/artwork/${UUID_RE.source}\\.jpg$`));
     expect(mockWriteFile).toHaveBeenCalledTimes(2);
   });
 
@@ -98,7 +100,7 @@ describe("POST /api/admin/upload", () => {
     const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
     await POST(makeRequest({ file, dir: "artwork" }));
     expect(mockPut).toHaveBeenCalledWith(
-      expect.stringContaining("dev/artwork/photo.webp"),
+      expect.stringMatching(new RegExp(`^dev/artwork/${UUID_RE.source}\\.webp$`)),
       expect.anything(),
       expect.anything(),
     );

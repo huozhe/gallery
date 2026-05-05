@@ -23,7 +23,8 @@ import type {
 import { seedAbout, seedArtworks, seedTags } from "@/data/seed";
 
 type StoreData = {
-  artworks: Record<string, Artwork>;
+  artworks: Record<string, Artwork>; // keyed by stringified numeric id
+  artworkCounter: number;
   tags: Record<string, Tag>;
   users: Record<string, User>; // keyed by lowercased email
   sessions: Record<string, Session>; // keyed by token hash
@@ -37,7 +38,7 @@ const AUDIT_CAP = 5000;
 let writeChain: Promise<void> = Promise.resolve();
 
 function emptyData(): StoreData {
-  return { artworks: {}, tags: {}, users: {}, sessions: {}, audit: [] };
+  return { artworks: {}, artworkCounter: 0, tags: {}, users: {}, sessions: {}, audit: [] };
 }
 
 async function readFile(): Promise<StoreData> {
@@ -75,7 +76,8 @@ async function load(): Promise<StoreData> {
   ) {
     return update((d) => {
       for (const tag of seedTags) d.tags[tag.id] = tag;
-      for (const art of seedArtworks) d.artworks[art.id] = art;
+      for (const art of seedArtworks) d.artworks[String(art.id)] = art;
+      d.artworkCounter = seedArtworks.length;
       return d;
     });
   }
@@ -94,10 +96,13 @@ export async function seed(): Promise<{ tags: number; artworks: number }> {
       }
     }
     for (const art of seedArtworks) {
-      if (!data.artworks[art.id]) {
-        data.artworks[art.id] = art;
+      if (!data.artworks[String(art.id)]) {
+        data.artworks[String(art.id)] = art;
         addedArtworks++;
       }
+    }
+    if (addedArtworks > 0 && data.artworkCounter < seedArtworks.length) {
+      data.artworkCounter = seedArtworks.length;
     }
     return { tags: addedTags, artworks: addedArtworks };
   });
@@ -123,28 +128,40 @@ export const artworks = {
     return list;
   },
 
-  async get(id: string): Promise<Artwork | null> {
+  async get(id: number): Promise<Artwork | null> {
     const data = await load();
-    return data.artworks[id] ?? null;
+    return data.artworks[String(id)] ?? null;
+  },
+
+  async getBySlug(slug: string): Promise<Artwork | null> {
+    const data = await load();
+    return Object.values(data.artworks).find((a) => a.slug === slug) ?? null;
+  },
+
+  async nextId(): Promise<number> {
+    return update((data) => {
+      data.artworkCounter = (data.artworkCounter ?? 0) + 1;
+      return data.artworkCounter;
+    });
   },
 
   async upsert(record: Artwork): Promise<Artwork> {
     return update((data) => {
       const now = new Date().toISOString();
-      const existing = data.artworks[record.id];
+      const existing = data.artworks[String(record.id)];
       const next: Artwork = {
         ...record,
         createdAt: existing?.createdAt ?? record.createdAt ?? now,
         updatedAt: now,
       };
-      data.artworks[record.id] = next;
+      data.artworks[String(record.id)] = next;
       return next;
     });
   },
 
-  async softDelete(id: string): Promise<void> {
+  async softDelete(id: number): Promise<void> {
     await update((data) => {
-      const a = data.artworks[id];
+      const a = data.artworks[String(id)];
       if (!a) return;
       const now = new Date().toISOString();
       a.status = "deleted";
@@ -153,9 +170,9 @@ export const artworks = {
     });
   },
 
-  async restore(id: string): Promise<void> {
+  async restore(id: number): Promise<void> {
     await update((data) => {
-      const a = data.artworks[id];
+      const a = data.artworks[String(id)];
       if (!a) return;
       a.status = "live";
       delete a.deletedAt;
@@ -163,9 +180,9 @@ export const artworks = {
     });
   },
 
-  async purge(id: string): Promise<void> {
+  async purge(id: number): Promise<void> {
     await update((data) => {
-      delete data.artworks[id];
+      delete data.artworks[String(id)];
     });
   },
 };

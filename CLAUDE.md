@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
-npm test         # Vitest (72 tests); npx vitest run --coverage for coverage report
+npm test         # Vitest (73 tests); npx vitest run --coverage for coverage report
 npm run migrate:images  # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
 ```
 
@@ -25,6 +25,7 @@ Next.js 14 App Router, TypeScript, Tailwind CSS. Deployed on Vercel. Data and up
 - Wraps the raw client in a `PrefixedRedis` class. Every key is automatically prefixed with `REDIS_KEY_PREFIX` (e.g. `dev:`) — call sites cannot bypass it.
 - `ensureSeeded()` runs lazily on the first read of artworks/tags/users/sessions; seeds artworks/tags/about from `src/data/seed.ts`, then independently seeds the admin user from `GALLERY_ADMIN_EMAIL` + `GALLERY_ADMIN_PASSWORD` (the user check is *outside* the artwork check — important so an empty user index still gets seeded after a partial bootstrap).
 - Sessions use Redis TTL via `setex`.
+- Artwork keys: `artwork:{numericId}` (integer); `artworks:index` (Set of stringified IDs); `artworks:slugs` (Hash: slug → numericId); `artworks:counter` (auto-increment integer). `Artwork.id` is a number; `Artwork.slug` is the URL-friendly string used in public routes.
 
 Seed data lives in `src/data/seed.ts`. To reset local dev: `rm .data/store.json && npm run dev`.
 
@@ -32,7 +33,7 @@ Seed data lives in `src/data/seed.ts`. To reset local dev: `rm .data/store.json 
 
 **Public (route group `(public)`):**
 - `/` — curatorial rooms view: live works grouped by visible primary-room tags, sorted by `orderByTag[tag.id]`. Filter pills are anchor links to `#room-{id}` sections. First image gets `priority` for LCP.
-- `/artwork/[id]` — orientation-aware layout (portrait: 2-col, landscape: stacked); lightbox; reference image is a draggable/resizable floating overlay; prev/next nav is scoped to the artwork's primary room with a center index link.
+- `/artwork/[slug]` — orientation-aware layout (portrait: 2-col, landscape: stacked); lightbox; reference image is a draggable/resizable floating overlay; prev/next nav is scoped to the artwork's primary room with a center index link.
 - `/about` — bio + contact email read from store, edited at `/admin/about`.
 - `not-found.tsx` — "Plate · 404" page (no own `<Nav />`; layout supplies it).
 
@@ -53,8 +54,8 @@ Session cookie (`gallery_session`) holds a 32-byte random hex token; stored *has
 `next/image` is used everywhere. Upload endpoint: `POST /api/admin/upload`.
 
 Every upload is processed through `sharp`: resized to ≤2000px on the longest edge, converted to WebP (quality 85, metadata stripped). The original is preserved verbatim.
-- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/{dir}/{baseName}.webp`; original → `public/original/{dir}/{safeName}`.
-- **Production / dev with Blob**: WebP → Blob at `{BLOB_PATH_PREFIX}{dir}/{baseName}.webp`; original → Blob at `{BLOB_PATH_PREFIX}original/{dir}/{safeName}`. Full Blob URLs stored on the artwork record.
+- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/{dir}/{uuid}.webp`; original → `public/original/{dir}/{uuid}.{ext}`.
+- **Production / dev with Blob**: WebP → Blob at `{BLOB_PATH_PREFIX}{dir}/{uuid}.webp`; original → Blob at `{BLOB_PATH_PREFIX}original/{dir}/{uuid}.{ext}`. Full Blob URLs stored on the artwork record. Original filename is discarded; `crypto.randomUUID()` is used instead.
 
 Response: `{ path, originalPath, width, height }` — dimensions come from sharp output.
 `Artwork.originalImage` stores the original URL alongside `Artwork.image`.

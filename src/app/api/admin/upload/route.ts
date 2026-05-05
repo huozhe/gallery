@@ -19,8 +19,10 @@ export async function POST(req: Request) {
   if (!file?.name) return Response.json({ error: "No file" }, { status: 400 });
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const baseName = safeName.replace(/\.[^.]+$/, "");
-  const webpName = `${baseName}.webp`;
+  const origExt = (safeName.match(/\.([^.]+)$/) ?? ["", "bin"])[1].toLowerCase();
+  const uuid = crypto.randomUUID();
+  const webpName = `${uuid}.webp`;
+  const origName = `${uuid}.${origExt}`;
 
   const inputBuffer = Buffer.from(await file.arrayBuffer());
   const img = sharp(inputBuffer);
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
         allowOverwrite: true,
         contentType: "image/webp",
       }),
-      put(`${blobPrefix}original/${dir}/${safeName}`, inputBuffer, {
+      put(`${blobPrefix}original/${dir}/${origName}`, inputBuffer, {
         access: "public",
         allowOverwrite: true,
       }),
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
     const { mkdir, writeFile } = await import("fs/promises");
     const pathMod = await import("path");
     const webpDest = pathMod.join(process.cwd(), "public", dir, webpName);
-    const origDest = pathMod.join(process.cwd(), "public", "original", dir, safeName);
+    const origDest = pathMod.join(process.cwd(), "public", "original", dir, origName);
     await mkdir(pathMod.dirname(webpDest), { recursive: true });
     await mkdir(pathMod.dirname(origDest), { recursive: true });
     await Promise.all([
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
     ]);
     return Response.json({
       path: `/${dir}/${webpName}`,
-      originalPath: `/original/${dir}/${safeName}`,
+      originalPath: `/original/${dir}/${origName}`,
       width: info.width,
       height: info.height,
     });

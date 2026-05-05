@@ -6,7 +6,7 @@ export default function ArtworkCard({ artwork, priority = false }: { artwork: Ar
   const isLandscape = artwork.width > artwork.height;
 
   return (
-    <Link href={`/artwork/${artwork.id}`} className="group block break-inside-avoid mb-8">
+    <Link href={`/artwork/${artwork.slug}`} className="group block break-inside-avoid mb-8">
       <div className={`overflow-hidden bg-neutral-100 ${isLandscape ? "aspect-[4/3]" : "aspect-[3/4]"}`}>
         <Image
           src={artwork.image}

@@ -10,7 +10,9 @@ export default async function EditWorkPage({
 }) {
   await requireSession();
   const { id } = await params;
-  const [work, allTags] = await Promise.all([artworks.get(id), tags.list()]);
+  const numericId = parseInt(id, 10);
+  if (isNaN(numericId)) notFound();
+  const [work, allTags] = await Promise.all([artworks.get(numericId), tags.list()]);
   if (!work) notFound();
 
   return <ArtworkForm mode="edit" artwork={work} allTags={allTags} />;

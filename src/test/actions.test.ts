@@ -6,6 +6,8 @@ const mockSessionsGet = vi.fn();
 const mockSessionsUpsert = vi.fn();
 const mockSessionsDelete = vi.fn();
 const mockArtworksGet = vi.fn();
+const mockArtworksGetBySlug = vi.fn();
+const mockArtworksNextId = vi.fn(() => Promise.resolve(1));
 const mockArtworksUpsert = vi.fn();
 const mockArtworksSoftDelete = vi.fn();
 const mockArtworksRestore = vi.fn();
@@ -28,6 +30,8 @@ const mockCheckRateLimit = vi.fn(() => true);
 vi.mock("@/lib/store", () => ({
   artworks: {
     get: mockArtworksGet,
+    getBySlug: mockArtworksGetBySlug,
+    nextId: mockArtworksNextId,
     upsert: mockArtworksUpsert,
     softDelete: mockArtworksSoftDelete,
     restore: mockArtworksRestore,
@@ -91,10 +95,11 @@ beforeEach(() => {
 
 describe("saveArtwork", () => {
   it("creates a new artwork", async () => {
-    mockArtworksGet.mockResolvedValue(null);
-    mockArtworksUpsert.mockResolvedValue({ id: "w1" });
+    mockArtworksGetBySlug.mockResolvedValue(null);
+    mockArtworksUpsert.mockResolvedValue({ id: 1, slug: "w1" });
     const result = await saveArtwork({
-      id: "w1",
+      id: 0,
+      slug: "w1",
       title: "Test",
       year: 2024,
       medium: "Oil",
@@ -113,9 +118,11 @@ describe("saveArtwork", () => {
   });
 
   it("updates existing artwork", async () => {
-    mockArtworksUpsert.mockResolvedValue({ id: "w1" });
+    mockArtworksGetBySlug.mockResolvedValue(null);
+    mockArtworksUpsert.mockResolvedValue({ id: 1, slug: "w1" });
     const result = await saveArtwork({
-      id: "w1",
+      id: 1,
+      slug: "w1",
       title: "Updated",
       year: 2024,
       medium: "Oil",
@@ -132,10 +139,11 @@ describe("saveArtwork", () => {
     expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.update" }));
   });
 
-  it("rejects duplicate new artwork ID", async () => {
-    mockArtworksGet.mockResolvedValue({ id: "w1", title: "Existing" });
+  it("rejects duplicate slug on create", async () => {
+    mockArtworksGetBySlug.mockResolvedValue({ id: 1, slug: "w1", title: "Existing" });
     const result = await saveArtwork({
-      id: "w1",
+      id: 0,
+      slug: "w1",
       title: "Test",
       year: 2024,
       medium: "Oil",
@@ -153,7 +161,7 @@ describe("saveArtwork", () => {
   });
 
   it("validates required fields", async () => {
-    const result = await saveArtwork({ id: "w1", title: "" });
+    const result = await saveArtwork({ id: 0, slug: "w1", title: "" });
     expect(result.success).toBe(false);
     expect(result.error).toContain("Title");
   });
@@ -214,27 +222,27 @@ describe("deleteTag", () => {
 
 describe("softDeleteArtwork", () => {
   it("soft-deletes an artwork", async () => {
-    mockArtworksGet.mockResolvedValue({ id: "w1", status: "live" });
-    await softDeleteArtwork("w1");
-    expect(mockArtworksSoftDelete).toHaveBeenCalledWith("w1");
+    mockArtworksGet.mockResolvedValue({ id: 1, slug: "w1", status: "live" });
+    await softDeleteArtwork(1);
+    expect(mockArtworksSoftDelete).toHaveBeenCalledWith(1);
     expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.delete" }));
   });
 });
 
 describe("restoreArtwork", () => {
   it("restores a soft-deleted artwork", async () => {
-    mockArtworksGet.mockResolvedValue({ id: "w1", status: "deleted" });
-    await restoreArtwork("w1");
-    expect(mockArtworksRestore).toHaveBeenCalledWith("w1");
+    mockArtworksGet.mockResolvedValue({ id: 1, slug: "w1", status: "deleted" });
+    await restoreArtwork(1);
+    expect(mockArtworksRestore).toHaveBeenCalledWith(1);
     expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.restore" }));
   });
 });
 
 describe("purgeArtwork", () => {
   it("permanently deletes an artwork", async () => {
-    mockArtworksGet.mockResolvedValue({ id: "w1", title: "Test" });
-    await purgeArtwork("w1");
-    expect(mockArtworksPurge).toHaveBeenCalledWith("w1");
+    mockArtworksGet.mockResolvedValue({ id: 1, slug: "w1", title: "Test" });
+    await purgeArtwork(1);
+    expect(mockArtworksPurge).toHaveBeenCalledWith(1);
     expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.purge" }));
   });
 });
@@ -242,14 +250,15 @@ describe("purgeArtwork", () => {
 describe("reorderArtworks", () => {
   it("reorders artworks globally", async () => {
     mockArtworksList.mockResolvedValue([
-      { id: "w1", orderGlobal: 0 },
-      { id: "w2", orderGlobal: 1 },
+      { id: 1, slug: "w1", orderGlobal: 0 },
+      { id: 2, slug: "w2", orderGlobal: 1 },
     ]);
-    mockArtworksGet.mockImplementation(async (id) => ({
+    mockArtworksGet.mockImplementation(async (id: number) => ({
       id,
-      orderGlobal: id === "w1" ? 0 : 1,
+      slug: id === 1 ? "w1" : "w2",
+      orderGlobal: id === 1 ? 0 : 1,
     }));
-    await reorderArtworks(["w2", "w1"]);
+    await reorderArtworks([2, 1]);
     expect(mockArtworksUpsert).toHaveBeenCalled();
     expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.update" }));
   });
@@ -257,11 +266,12 @@ describe("reorderArtworks", () => {
 
 describe("reorderArtworksByTag", () => {
   it("reorders artworks within a tag", async () => {
-    mockArtworksGet.mockImplementation(async (id) => ({
+    mockArtworksGet.mockImplementation(async (id: number) => ({
       id,
+      slug: `w${id}`,
       orderByTag: {},
     }));
-    await reorderArtworksByTag("paintings", ["w1", "w2"]);
+    await reorderArtworksByTag("paintings", [1, 2]);
     expect(mockArtworksUpsert).toHaveBeenCalled();
     expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.update" }));
   });

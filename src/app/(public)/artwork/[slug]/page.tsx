@@ -110,11 +110,11 @@ function Metadata({ artwork }: { artwork: Artwork }) {
 export default async function ArtworkPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 }) {
-  const { id } = await params;
+  const { slug } = await params;
   const [artwork, allWorks, primaryTags] = await Promise.all([
-    artworks.get(id),
+    artworks.getBySlug(slug),
     artworks.list({ status: "live" }),
     tags.list({ visible: true, primaryRoom: true }),
   ]);
@@ -127,7 +127,7 @@ export default async function ArtworkPage({
         .filter((w) => w.tagIds.includes(roomTag.id))
         .sort((a, b) => (a.orderByTag[roomTag.id] ?? 999) - (b.orderByTag[roomTag.id] ?? 999))
     : [];
-  const pos = roomWorks.findIndex((w) => w.id === id);
+  const pos = roomWorks.findIndex((w) => w.slug === slug);
   const prevWork = pos > 0 ? roomWorks[pos - 1] : null;
   const nextWork = pos !== -1 && pos < roomWorks.length - 1 ? roomWorks[pos + 1] : null;
 
@@ -175,7 +175,7 @@ export default async function ArtworkPage({
       <nav className="mt-16 pt-6 border-t border-neutral-200 flex justify-between items-center text-sm">
         {prevWork ? (
           <Link
-            href={`/artwork/${prevWork.id}`}
+            href={`/artwork/${prevWork.slug}`}
             className="text-neutral-500 hover:text-neutral-900 transition-colors"
           >
             ← Prev: {prevWork.title}
@@ -191,7 +191,7 @@ export default async function ArtworkPage({
         </Link>
         {nextWork ? (
           <Link
-            href={`/artwork/${nextWork.id}`}
+            href={`/artwork/${nextWork.slug}`}
             className="text-neutral-500 hover:text-neutral-900 transition-colors"
           >
             Next: {nextWork.title} →

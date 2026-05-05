@@ -39,6 +39,10 @@ class PrefixedRedis {
   lpush(key: string, ...values: string[])                 { return this.r.lpush(this.k(key), ...values); }
   ltrim(key: string, start: number, stop: number)         { return this.r.ltrim(this.k(key), start, stop); }
   lrange(key: string, start: number, stop: number)        { return this.r.lrange(this.k(key), start, stop); }
+  incr(key: string)                                       { return this.r.incr(this.k(key)); }
+  hset(key: string, field: string, value: string)         { return this.r.hset(this.k(key), field, value); }
+  hget(key: string, field: string)                        { return this.r.hget(this.k(key), field); }
+  hdel(key: string, field: string)                        { return this.r.hdel(this.k(key), field); }
 }
 
 // Reuse connection across requests (required for serverless warm instances).
@@ -107,8 +111,10 @@ async function ensureSeeded(): Promise<void> {
     }
     for (const art of seedArtworks) {
       await set(`artwork:${art.id}`, art);
-      await r.sadd("artworks:index", art.id);
+      await r.sadd("artworks:index", String(art.id));
+      await r.hset("artworks:slugs", art.slug, String(art.id));
     }
+    await r.set("artworks:counter", String(seedArtworks.length));
     await set("about:content", seedAbout);
   }
 
@@ -151,9 +157,13 @@ export async function seed(): Promise<{ tags: number; artworks: number }> {
     const exists = await r.exists(`artwork:${art.id}`);
     if (!exists) {
       await set(`artwork:${art.id}`, art);
-      await r.sadd("artworks:index", art.id);
+      await r.sadd("artworks:index", String(art.id));
+      await r.hset("artworks:slugs", art.slug, String(art.id));
       addedArtworks++;
     }
+  }
+  if (addedArtworks > 0) {
+    await r.set("artworks:counter", String(seedArtworks.length));
   }
   return { tags: addedTags, artworks: addedArtworks };
 }
@@ -182,9 +192,21 @@ export const artworks = {
     return list;
   },
 
-  async get(id: string): Promise<Artwork | null> {
+  async get(id: number): Promise<Artwork | null> {
     await ensureSeeded();
     return get<Artwork>(`artwork:${id}`);
+  },
+
+  async getBySlug(slug: string): Promise<Artwork | null> {
+    await ensureSeeded();
+    const r = getClient();
+    const idStr = await r.hget("artworks:slugs", slug);
+    if (!idStr) return null;
+    return get<Artwork>(`artwork:${idStr}`);
+  },
+
+  async nextId(): Promise<number> {
+    return await getClient().incr("artworks:counter");
   },
 
   async upsert(record: Artwork): Promise<Artwork> {
@@ -196,29 +218,35 @@ export const artworks = {
       createdAt: existing?.createdAt ?? record.createdAt ?? now,
       updatedAt: now,
     };
+    if (existing && existing.slug !== next.slug) {
+      await r.hdel("artworks:slugs", existing.slug);
+    }
+    await r.hset("artworks:slugs", next.slug, String(next.id));
     await set(`artwork:${next.id}`, next);
-    await r.sadd("artworks:index", next.id);
+    await r.sadd("artworks:index", String(next.id));
     return next;
   },
 
-  async softDelete(id: string): Promise<void> {
+  async softDelete(id: number): Promise<void> {
     const a = await get<Artwork>(`artwork:${id}`);
     if (!a) return;
     const now = new Date().toISOString();
     await set(`artwork:${id}`, { ...a, status: "deleted", deletedAt: now, updatedAt: now });
   },
 
-  async restore(id: string): Promise<void> {
+  async restore(id: number): Promise<void> {
     const a = await get<Artwork>(`artwork:${id}`);
     if (!a) return;
     const { deletedAt: _d, ...rest } = a;
     await set(`artwork:${id}`, { ...rest, status: "live", updatedAt: new Date().toISOString() });
   },
 
-  async purge(id: string): Promise<void> {
+  async purge(id: number): Promise<void> {
     const r = getClient();
+    const existing = await get<Artwork>(`artwork:${id}`);
+    if (existing) await r.hdel("artworks:slugs", existing.slug);
     await r.del(`artwork:${id}`);
-    await r.srem("artworks:index", id);
+    await r.srem("artworks:index", String(id));
   },
 };
 

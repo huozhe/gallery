@@ -69,7 +69,7 @@ export default function AdminDashboard({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return works.filter((w) => {
-      if (q && !w.title.toLowerCase().includes(q) && !w.id.toLowerCase().includes(q)) {
+      if (q && !w.title.toLowerCase().includes(q) && !w.slug.toLowerCase().includes(q)) {
         return false;
       }
       if (tagFilter && !w.tagIds.includes(tagFilter)) return false;
@@ -252,7 +252,7 @@ function Row({
       </div>
       <div className="min-w-0">
         <div className="font-medium truncate">{work.title}</div>
-        <div className="text-xs text-neutral-500 truncate">{work.id}</div>
+        <div className="text-xs text-neutral-500 truncate">{work.slug}</div>
       </div>
       <div className="text-neutral-700 truncate min-w-0">{work.medium}</div>
       <div className="text-neutral-700">{work.year}</div>
@@ -355,7 +355,7 @@ function StatusPill({ status }: { status: Artwork["status"] }) {
   return <span className={`text-xs px-1.5 py-0.5 border ${cls}`}>{status}</span>;
 }
 
-function DeleteButton({ id, title }: { id: string; title: string }) {
+function DeleteButton({ id, title }: { id: number; title: string }) {
   const [pending, start] = useTransition();
   return (
     <button
@@ -373,7 +373,7 @@ function DeleteButton({ id, title }: { id: string; title: string }) {
   );
 }
 
-function RestoreButton({ id }: { id: string }) {
+function RestoreButton({ id }: { id: number }) {
   const [pending, start] = useTransition();
   return (
     <button
@@ -386,7 +386,7 @@ function RestoreButton({ id }: { id: string }) {
   );
 }
 
-function PurgeButton({ id, title }: { id: string; title: string }) {
+function PurgeButton({ id, title }: { id: number; title: string }) {
   const [pending, start] = useTransition();
   return (
     <button

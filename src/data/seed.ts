@@ -40,7 +40,8 @@ export const seedAbout: AboutContent = {
 
 export const seedArtworks: Artwork[] = [
   {
-    id: "Eskimo-Madonna",
+    id: 1,
+    slug: "Eskimo-Madonna",
     title: "Eskimo Madonna",
     year: 2026,
     medium: "Charcoal",
@@ -60,7 +61,8 @@ export const seedArtworks: Artwork[] = [
     updatedAt: NOW,
   },
   {
-    id: "Blossom",
+    id: 2,
+    slug: "Blossom",
     title: "Blossom",
     year: 2026,
     medium: "Charcoal",
@@ -81,7 +83,8 @@ export const seedArtworks: Artwork[] = [
     updatedAt: NOW,
   },
   {
-    id: "Highland-Light-Cape-Cod-Massachusetts",
+    id: 3,
+    slug: "Highland-Light-Cape-Cod-Massachusetts",
     title: "Highland Light, Cape Cod, Massachusetts",
     year: 2026,
     medium: "Charcoal",
@@ -96,7 +99,8 @@ export const seedArtworks: Artwork[] = [
     updatedAt: NOW,
   },
   {
-    id: "Rialto-Bridge-Over-The-Grand-Canal-Venice",
+    id: 4,
+    slug: "Rialto-Bridge-Over-The-Grand-Canal-Venice",
     title: "Rialto Bridge Over The Grand Canal, Venice",
     year: 2026,
     medium: "Watercolor",
@@ -111,7 +115,8 @@ export const seedArtworks: Artwork[] = [
     updatedAt: NOW,
   },
   {
-    id: "Yosemite-Valley",
+    id: 5,
+    slug: "Yosemite-Valley",
     title: "Yosemite Valley",
     year: 2026,
     medium: "Tombow pen, Pentel Aquash water brush",

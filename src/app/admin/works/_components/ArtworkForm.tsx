@@ -37,7 +37,8 @@ export default function ArtworkForm(props: Props) {
   const src = isEdit ? props.artwork : null;
 
   const [form, setForm] = useState({
-    id: src?.id ?? "",
+    id: src?.id ?? 0,
+    slug: src?.slug ?? "",
     title: src?.title ?? "",
     year: src?.year?.toString() ?? new Date().getFullYear().toString(),
     medium: src?.medium ?? "",
@@ -61,7 +62,7 @@ export default function ArtworkForm(props: Props) {
     height: src?.reference?.imageHeight ?? 0,
   });
 
-  const [idManuallySet, setIdManuallySet] = useState(isEdit);
+  const [slugManuallySet, setSlugManuallySet] = useState(isEdit);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [refUploadStatus, setRefUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [error, setError] = useState<string>("");
@@ -72,8 +73,8 @@ export default function ArtworkForm(props: Props) {
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => {
       const next = { ...f, [key]: value };
-      if (key === "title" && !idManuallySet) {
-        next.id = slugify(value as string);
+      if (key === "title" && !slugManuallySet) {
+        next.slug = slugify(value as string);
       }
       return next;
     });
@@ -137,6 +138,7 @@ export default function ArtworkForm(props: Props) {
 
       const result = await saveArtwork({
         id: form.id,
+        slug: form.slug,
         title: form.title,
         year: parseInt(form.year, 10),
         medium: form.medium,
@@ -236,12 +238,11 @@ export default function ArtworkForm(props: Props) {
             />
           </Field>
 
-          <Field label={isEdit ? "ID (slug)" : "ID / slug"} required>
+          <Field label="Slug" required>
             <input
-              value={form.id}
-              onChange={(e) => { setIdManuallySet(true); set("id", e.target.value); }}
-              className={inputCls + (isEdit ? " bg-neutral-50 text-neutral-500 cursor-not-allowed" : "")}
-              readOnly={isEdit}
+              value={form.slug}
+              onChange={(e) => { setSlugManuallySet(true); set("slug", e.target.value); }}
+              className={inputCls}
               required
               pattern="[a-zA-Z0-9-]+"
               title="Letters, numbers, and hyphens only"
@@ -356,7 +357,7 @@ export default function ArtworkForm(props: Props) {
                     onClick={() => refFileRef.current?.click()}
                     disabled={!form.id}
                     className="border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-900 disabled:opacity-40"
-                    title={!form.id ? "Set an ID/slug first" : undefined}
+                    title={!form.id ? "Save the artwork first to enable reference image upload" : undefined}
                   >
                     {referenceImage.path ? "Replace" : "Upload reference image"}
                   </button>

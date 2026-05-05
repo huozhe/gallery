@@ -9,7 +9,8 @@ export type ArtworkReference = {
 };
 
 export type Artwork = {
-  id: string;
+  id: number;
+  slug: string;
   title: string;
   year: number;
   medium: string;
