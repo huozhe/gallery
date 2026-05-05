@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "migrate": "tsx scripts/migrate.ts",
+    "migrate:images": "tsx scripts/migrate-images.ts",
     "admin:create": "tsx scripts/admin-create.ts"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "sharp": "^0.34.5",
     "ulid": "^3.0.2",
     "zod": "^4.4.2"
   },

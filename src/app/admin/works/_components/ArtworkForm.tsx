@@ -44,6 +44,7 @@ export default function ArtworkForm(props: Props) {
     dimensions: src?.dimensions ?? "",
     description: src?.description ?? "",
     image: src?.image ?? "",
+    originalImage: src?.originalImage ?? "",
     width: src?.width ?? 0,
     height: src?.height ?? 0,
     status: (src?.status ?? "live") as "live" | "draft" | "hidden",
@@ -90,8 +91,8 @@ export default function ArtworkForm(props: Props) {
       fd.append("height", String(dims.height));
       const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json() as { path: string; width: number; height: number };
-      setForm((f) => ({ ...f, image: data.path, width: data.width, height: data.height }));
+      const data = await res.json() as { path: string; originalPath?: string; width: number; height: number };
+      setForm((f) => ({ ...f, image: data.path, originalImage: data.originalPath ?? "", width: data.width, height: data.height }));
       setUploadStatus("done");
     } catch {
       setUploadStatus("error");
@@ -142,6 +143,7 @@ export default function ArtworkForm(props: Props) {
         dimensions: form.dimensions || undefined,
         description: form.description || undefined,
         image: form.image,
+        originalImage: form.originalImage || undefined,
         width: form.width,
         height: form.height,
         status: form.status,

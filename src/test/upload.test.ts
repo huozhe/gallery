@@ -20,6 +20,14 @@ vi.mock("fs/promises", () => ({
   mkdir: mockMkdir,
 }));
 
+const mockSharpInstance = {
+  metadata: vi.fn().mockResolvedValue({ width: 800, height: 600 }),
+  resize: vi.fn().mockReturnThis(),
+  webp: vi.fn().mockReturnThis(),
+  toBuffer: vi.fn().mockResolvedValue({ data: Buffer.from("webp"), info: { width: 800, height: 600 } }),
+};
+vi.mock("sharp", () => ({ default: vi.fn(() => mockSharpInstance) }));
+
 const { POST } = await import("@/app/api/admin/upload/route");
 
 function makeRequest(fields: Record<string, string | File>): Request {
@@ -30,6 +38,10 @@ function makeRequest(fields: Record<string, string | File>): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockSharpInstance.metadata.mockResolvedValue({ width: 800, height: 600 });
+  mockSharpInstance.resize.mockReturnValue(mockSharpInstance);
+  mockSharpInstance.webp.mockReturnValue(mockSharpInstance);
+  mockSharpInstance.toBuffer.mockResolvedValue({ data: Buffer.from("webp"), info: { width: 800, height: 600 } });
   delete process.env.BLOB_READ_WRITE_TOKEN;
   delete process.env.BLOB_PATH_PREFIX;
   (cookies as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -56,17 +68,18 @@ describe("POST /api/admin/upload", () => {
     expect(res.status).toBe(400);
   });
 
-  it("writes to disk in local dev mode", async () => {
+  it("writes WebP and original to disk in local dev mode", async () => {
     mockSessionsGet.mockResolvedValue({ id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 86400000).toISOString() });
     const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
     const res = await POST(makeRequest({ file, dir: "artwork", width: "800", height: "600" }));
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(body.path).toBe("/artwork/photo.jpg");
-    expect(mockWriteFile).toHaveBeenCalled();
+    expect(body.path).toBe("/artwork/photo.webp");
+    expect(body.originalPath).toBe("/original/artwork/photo.jpg");
+    expect(mockWriteFile).toHaveBeenCalledTimes(2);
   });
 
-  it("uploads to Blob in production mode", async () => {
+  it("uploads WebP and original to Blob in production mode", async () => {
     process.env.BLOB_READ_WRITE_TOKEN = "tok";
     mockSessionsGet.mockResolvedValue({ id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 86400000).toISOString() });
     const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
@@ -74,7 +87,8 @@ describe("POST /api/admin/upload", () => {
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.path).toContain("blob.example.com");
-    expect(mockPut).toHaveBeenCalled();
+    expect(body.originalPath).toContain("blob.example.com");
+    expect(mockPut).toHaveBeenCalledTimes(2);
   });
 
   it("applies BLOB_PATH_PREFIX", async () => {
@@ -84,7 +98,7 @@ describe("POST /api/admin/upload", () => {
     const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
     await POST(makeRequest({ file, dir: "artwork" }));
     expect(mockPut).toHaveBeenCalledWith(
-      expect.stringContaining("dev/artwork/photo.jpg"),
+      expect.stringContaining("dev/artwork/photo.webp"),
       expect.anything(),
       expect.anything(),
     );
@@ -96,5 +110,27 @@ describe("POST /api/admin/upload", () => {
     const res = await POST(makeRequest({ file, dir: "../../etc/passwd" }));
     const body = await res.json();
     expect(body.path).not.toContain("..");
+  });
+
+  it("resizes image when longest edge exceeds 2000px", async () => {
+    mockSharpInstance.metadata.mockResolvedValue({ width: 4000, height: 3000 });
+    mockSharpInstance.toBuffer.mockResolvedValue({ data: Buffer.from("webp"), info: { width: 2000, height: 1500 } });
+    mockSessionsGet.mockResolvedValue({ id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 86400000).toISOString() });
+    const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
+    const res = await POST(makeRequest({ file, dir: "artwork" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(mockSharpInstance.resize).toHaveBeenCalledWith({ width: 2000 });
+    expect(body.width).toBe(2000);
+    expect(body.height).toBe(1500);
+  });
+
+  it("does not resize image within 2000px", async () => {
+    mockSharpInstance.metadata.mockResolvedValue({ width: 1200, height: 800 });
+    mockSharpInstance.toBuffer.mockResolvedValue({ data: Buffer.from("webp"), info: { width: 1200, height: 800 } });
+    mockSessionsGet.mockResolvedValue({ id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 86400000).toISOString() });
+    const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
+    await POST(makeRequest({ file, dir: "artwork" }));
+    expect(mockSharpInstance.resize).toHaveBeenCalledWith(undefined);
   });
 });

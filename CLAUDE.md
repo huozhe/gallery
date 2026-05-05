@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
-npm test         # Vitest (70 tests); npx vitest run --coverage for coverage report
+npm test         # Vitest (72 tests); npx vitest run --coverage for coverage report
+npm run migrate:images  # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
 ```
 
 ## Architecture
@@ -50,8 +51,13 @@ Session cookie (`gallery_session`) holds a 32-byte random hex token; stored *has
 ### Images
 
 `next/image` is used everywhere. Upload endpoint: `POST /api/admin/upload`.
-- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): writes to `public/{dir}/{safeName}`.
-- **Production / dev with Blob**: uploads to Vercel Blob at `{BLOB_PATH_PREFIX}{dir}/{safeName}`. The full Blob URL is stored on the artwork record. `BLOB_PATH_PREFIX` (e.g. `dev/`) isolates dev uploads from prod within a shared Blob store.
+
+Every upload is processed through `sharp`: resized to ≤2000px on the longest edge, converted to WebP (quality 85, metadata stripped). The original is preserved verbatim.
+- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/{dir}/{baseName}.webp`; original → `public/original/{dir}/{safeName}`.
+- **Production / dev with Blob**: WebP → Blob at `{BLOB_PATH_PREFIX}{dir}/{baseName}.webp`; original → Blob at `{BLOB_PATH_PREFIX}original/{dir}/{safeName}`. Full Blob URLs stored on the artwork record.
+
+Response: `{ path, originalPath, width, height }` — dimensions come from sharp output.
+`Artwork.originalImage` stores the original URL alongside `Artwork.image`.
 
 `next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`. To add another external image host, extend that list.
 

@@ -16,6 +16,7 @@ export type Artwork = {
   dimensions?: string;
   description?: string;
   image: string;
+  originalImage?: string;
   width: number;
   height: number;
 
