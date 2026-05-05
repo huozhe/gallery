@@ -50,7 +50,13 @@ async function readImage(imgPath: string): Promise<Buffer> {
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${imgPath}`);
     return Buffer.from(await res.arrayBuffer());
   }
-  return readFile(path.join(process.cwd(), "public", imgPath));
+  // Try public/ first, then public/original/ (fallback after originals were moved)
+  const primary = path.join(process.cwd(), "public", imgPath);
+  try {
+    return await readFile(primary);
+  } catch {
+    return readFile(path.join(process.cwd(), "public", "original", imgPath));
+  }
 }
 
 async function saveLocalPair(
@@ -151,6 +157,8 @@ Next steps:
        git rm -r public/reference/
   3. Commit`);
   }
+
+  process.exit(0);
 }
 
 main().catch((err) => {
