@@ -18,7 +18,7 @@
  */
 
 import Redis from "ioredis";
-import { put, del } from "@vercel/blob";
+import { list, put, del } from "@vercel/blob";
 import type { Artwork } from "../src/data/types";
 
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -73,6 +73,17 @@ async function deleteBlob(url: string): Promise<void> {
   if (!DRY_RUN) await del(url);
 }
 
+async function listAllBlobs(prefix: string): Promise<string[]> {
+  const urls: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const res = await list({ prefix, limit: 1000, cursor });
+    urls.push(...res.blobs.map((b) => b.url));
+    cursor = res.hasMore ? res.cursor : undefined;
+  } while (cursor);
+  return urls;
+}
+
 async function main() {
   console.log(`DRY_RUN=${DRY_RUN}  REDIS_PREFIX="${REDIS_PREFIX}"\n`);
 
@@ -89,12 +100,11 @@ async function main() {
       || (a.reference?.image && needsPrefix(a.reference.image))
   );
 
-  if (!toMigrate.length) {
-    console.log("All blob URLs already have a prefix — nothing to do.");
-    process.exit(0);
+  if (toMigrate.length) {
+    console.log(`${toMigrate.length} artwork(s) have un-prefixed blob URLs:\n`);
+  } else {
+    console.log("All Redis-referenced blob URLs already have a prefix.\n");
   }
-
-  console.log(`${toMigrate.length} artwork(s) have un-prefixed blob URLs:\n`);
 
   for (const artwork of toMigrate) {
     console.log(`[${artwork.id}] ${artwork.slug}`);
@@ -121,6 +131,21 @@ async function main() {
 
     for (const url of oldUrls) await deleteBlob(url);
     console.log();
+  }
+
+  // ── Orphaned original/reference/ blobs (not stored in Redis) ────────────────
+  console.log("Scanning for orphaned original/reference/ blobs...\n");
+  const orphanedOriginals = (await listAllBlobs("original/reference/")).filter(needsPrefix);
+
+  if (orphanedOriginals.length) {
+    console.log(`${orphanedOriginals.length} orphaned original/reference/ blob(s):\n`);
+    for (const url of orphanedOriginals) {
+      await copyBlob(url);
+      await deleteBlob(url);
+      console.log();
+    }
+  } else {
+    console.log("No orphaned original/reference/ blobs found.\n");
   }
 
   console.log(`Migration ${DRY_RUN ? "(dry-run) " : ""}complete.`);
