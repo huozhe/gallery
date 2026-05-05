@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { sessions } from "@/lib/store";
 import { hashSessionToken } from "@/lib/auth";
-import { ARTIST_ID } from "@/lib/config";
+import { ARTIST_BLOB_ID } from "@/lib/config";
 import sharp from "sharp";
 
 const MAX_EDGE = 2000;
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     .webp({ quality: 85 })
     .toBuffer({ resolveWithObject: true });
 
-  const artistDir = `artists/${ARTIST_ID}`;
+  const artistDir = `artists/${ARTIST_BLOB_ID}`;
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     const { put } = await import("@vercel/blob");

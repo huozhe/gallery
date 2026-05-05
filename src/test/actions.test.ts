@@ -99,6 +99,7 @@ describe("saveArtwork", () => {
     mockArtworksUpsert.mockResolvedValue({ id: 1, slug: "w1" });
     const result = await saveArtwork({
       id: 0,
+      blobId: "aaaaaaaa-0000-0000-0000-000000000001",
       slug: "w1",
       title: "Test",
       year: 2024,
@@ -120,8 +121,10 @@ describe("saveArtwork", () => {
   it("updates existing artwork", async () => {
     mockArtworksGetBySlug.mockResolvedValue(null);
     mockArtworksUpsert.mockResolvedValue({ id: 1, slug: "w1" });
+    mockArtworksGet.mockResolvedValue(null);
     const result = await saveArtwork({
       id: 1,
+      blobId: "aaaaaaaa-0000-0000-0000-000000000002",
       slug: "w1",
       title: "Updated",
       year: 2024,
@@ -143,6 +146,7 @@ describe("saveArtwork", () => {
     mockArtworksGetBySlug.mockResolvedValue({ id: 1, slug: "w1", title: "Existing" });
     const result = await saveArtwork({
       id: 0,
+      blobId: "aaaaaaaa-0000-0000-0000-000000000001",
       slug: "w1",
       title: "Test",
       year: 2024,

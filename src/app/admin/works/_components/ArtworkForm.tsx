@@ -46,6 +46,7 @@ export default function ArtworkForm(props: Props) {
     medium: src?.medium ?? "",
     dimensions: src?.dimensions ?? "",
     description: src?.description ?? "",
+    blobId: src?.blobId ?? "",
     image: src?.image ?? "",
     originalImage: src?.originalImage ?? "",
     imageFilename: src?.imageFilename ?? "",
@@ -94,7 +95,7 @@ export default function ArtworkForm(props: Props) {
       fd.append("file", file);
       fd.append("width", String(dims.width));
       fd.append("height", String(dims.height));
-      fd.append("dir", `artworks/${form.id || pendingId}/images`);
+      fd.append("dir", `artworks/${form.blobId || pendingId}/images`);
       const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json() as { path: string; originalPath?: string; originalFilename?: string; width: number; height: number };
@@ -107,7 +108,7 @@ export default function ArtworkForm(props: Props) {
 
   async function handleRefFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !form.id) return;
+    if (!file || !form.blobId) return;
     setRefUploadStatus("uploading");
     try {
       const dims = await getImageDimensions(file);
@@ -115,7 +116,7 @@ export default function ArtworkForm(props: Props) {
       fd.append("file", file);
       fd.append("width", String(dims.width));
       fd.append("height", String(dims.height));
-      fd.append("dir", `artworks/${form.id}/references`);
+      fd.append("dir", `artworks/${form.blobId}/references`);
       const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json() as { path: string; originalFilename?: string; width: number; height: number };
@@ -144,6 +145,7 @@ export default function ArtworkForm(props: Props) {
 
       const result = await saveArtwork({
         id: form.id,
+        blobId: form.blobId || pendingId,
         slug: form.slug,
         title: form.title,
         year: parseInt(form.year, 10),
@@ -362,9 +364,9 @@ export default function ArtworkForm(props: Props) {
                   <button
                     type="button"
                     onClick={() => refFileRef.current?.click()}
-                    disabled={!form.id}
+                    disabled={!form.blobId}
                     className="border border-neutral-300 px-3 py-1.5 text-sm hover:border-neutral-900 disabled:opacity-40"
-                    title={!form.id ? "Save the artwork first to enable reference image upload" : undefined}
+                    title={!form.blobId ? "Save the artwork first to enable reference image upload" : undefined}
                   >
                     {referenceImage.path ? "Replace" : "Upload reference image"}
                   </button>

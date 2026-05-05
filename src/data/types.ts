@@ -17,6 +17,7 @@ export type Artwork = {
   medium: string;
   dimensions?: string;
   description?: string;
+  blobId: string;
   image: string;
   originalImage?: string;
   imageFilename?: string;

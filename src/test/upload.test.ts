@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { cookies } from "next/headers";
+import { ARTIST_BLOB_ID } from "@/lib/config";
 
 const mockSessionsGet = vi.fn();
 vi.mock("@/lib/store", () => ({
@@ -76,8 +77,8 @@ describe("POST /api/admin/upload", () => {
     const res = await POST(makeRequest({ file, dir: "artworks/3/images", width: "800", height: "600" }));
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(body.path).toMatch(new RegExp(`^/artists/1/artworks/3/images/${UUID_RE.source}\\.webp$`));
-    expect(body.originalPath).toMatch(new RegExp(`^/artists/1/artworks/3/images/original/${UUID_RE.source}\\.jpg$`));
+    expect(body.path).toMatch(new RegExp(`^/artists/${ARTIST_BLOB_ID}/artworks/3/images/${UUID_RE.source}\\.webp$`));
+    expect(body.originalPath).toMatch(new RegExp(`^/artists/${ARTIST_BLOB_ID}/artworks/3/images/original/${UUID_RE.source}\\.jpg$`));
     expect(body.originalFilename).toBe("photo.jpg");
     expect(mockWriteFile).toHaveBeenCalledTimes(2);
   });
@@ -102,7 +103,7 @@ describe("POST /api/admin/upload", () => {
     const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
     await POST(makeRequest({ file, dir: "artworks/3/images" }));
     expect(mockPut).toHaveBeenCalledWith(
-      expect.stringMatching(new RegExp(`^dev/artists/1/artworks/3/images/${UUID_RE.source}\\.webp$`)),
+      expect.stringMatching(new RegExp(`^dev/artists/${ARTIST_BLOB_ID}/artworks/3/images/${UUID_RE.source}\\.webp$`)),
       expect.anything(),
       expect.anything(),
     );

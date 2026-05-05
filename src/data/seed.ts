@@ -41,6 +41,7 @@ export const seedAbout: AboutContent = {
 export const seedArtworks: Artwork[] = [
   {
     id: 1,
+    blobId: "00000000-0000-0000-0000-000000000001",
     slug: "Eskimo-Madonna",
     title: "Eskimo Madonna",
     year: 2026,
@@ -62,6 +63,7 @@ export const seedArtworks: Artwork[] = [
   },
   {
     id: 2,
+    blobId: "00000000-0000-0000-0000-000000000002",
     slug: "Blossom",
     title: "Blossom",
     year: 2026,
@@ -84,6 +86,7 @@ export const seedArtworks: Artwork[] = [
   },
   {
     id: 3,
+    blobId: "00000000-0000-0000-0000-000000000003",
     slug: "Highland-Light-Cape-Cod-Massachusetts",
     title: "Highland Light, Cape Cod, Massachusetts",
     year: 2026,
@@ -100,6 +103,7 @@ export const seedArtworks: Artwork[] = [
   },
   {
     id: 4,
+    blobId: "00000000-0000-0000-0000-000000000004",
     slug: "Rialto-Bridge-Over-The-Grand-Canal-Venice",
     title: "Rialto Bridge Over The Grand Canal, Venice",
     year: 2026,
@@ -116,6 +120,7 @@ export const seedArtworks: Artwork[] = [
   },
   {
     id: 5,
+    blobId: "00000000-0000-0000-0000-000000000005",
     slug: "Yosemite-Valley",
     title: "Yosemite Valley",
     year: 2026,

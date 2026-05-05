@@ -1,1 +1,2 @@
 export const ARTIST_ID = 1;
+export const ARTIST_BLOB_ID = "00000000-0000-0000-0000-0000000000ff";
