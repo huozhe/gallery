@@ -55,12 +55,13 @@ Session cookie (`gallery_session`) holds a 32-byte random hex token; stored *has
 `next/image` is used everywhere. Upload endpoint: `POST /api/admin/upload`.
 
 Every upload is processed through `sharp`: resized to ≤2000px on the longest edge, converted to WebP (quality 85, metadata stripped). The original is preserved verbatim.
-- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/artists/{ARTIST_ID}/{dir}/{uuid}.webp`; original → `public/artists/{ARTIST_ID}/{dir}/original/{uuid}.{ext}`.
-- **Production / dev with Blob**: WebP → Blob at `{BLOB_PATH_PREFIX}artists/{ARTIST_ID}/{dir}/{uuid}.webp`; original → Blob at `{BLOB_PATH_PREFIX}artists/{ARTIST_ID}/{dir}/original/{uuid}.{ext}`. Full Blob URLs stored on the artwork record. UUID filename used for the blob; original filename stored as `imageFilename` on the artwork record.
-- **`ARTIST_ID`** is exported from `src/lib/config.ts` (currently `1`; becomes dynamic in the multi-tenant phase).
-- **Artwork images** use `dir=artworks/{id}/images`; **reference images** use `dir=artworks/{id}/references`. Both require a saved artwork ID (same pattern).
-- **New artwork creation**: main image upload uses `dir=artworks/{pendingId}/images` where `pendingId` is a client-side UUID generated at form mount. This means newly created artworks have a UUID-keyed blob dir until the image is replaced on the edit page.
+- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/artists/{ARTIST_BLOB_ID}/{dir}/{uuid}.webp`; original → `public/artists/{ARTIST_BLOB_ID}/{dir}/original/{uuid}.{ext}`.
+- **Production / dev with Blob**: WebP → Blob at `{BLOB_PATH_PREFIX}artists/{ARTIST_BLOB_ID}/{dir}/{uuid}.webp`; original → `{BLOB_PATH_PREFIX}artists/{ARTIST_BLOB_ID}/{dir}/original/{uuid}.{ext}`. Full Blob URLs stored on the artwork record.
+- **`ARTIST_BLOB_ID`** is a fixed UUID in `src/lib/config.ts` used exclusively in blob paths (opaque, not the numeric `ARTIST_ID`).
+- **`Artwork.blobId`** is a stable UUID assigned at creation and used as the artwork's blob directory name. `ArtworkForm` generates a `pendingId` UUID client-side; this becomes the permanent `blobId` on first save.
+- **Artwork images** use `dir=artworks/{blobId}/images`; **reference images** use `dir=artworks/{blobId}/references`. Reference upload requires a saved artwork (guard: `!form.blobId`).
 - **`Artwork.imageFilename`** and **`ArtworkReference.imageFilename`** store the original upload filename as metadata in Redis (never exposed to visitors).
+- **Stale blobs** are deleted by `saveArtwork` when image URLs change on update; `purgeArtwork` deletes all artwork blobs.
 
 Response: `{ path, originalPath, originalFilename, width, height }` — dimensions come from sharp output.
 `Artwork.originalImage` stores the original URL alongside `Artwork.image`.
@@ -79,7 +80,7 @@ When the same Redis + Blob is shared between local dev and production, set both 
 REDIS_KEY_PREFIX=dev:
 BLOB_PATH_PREFIX=dev/
 ```
-Production leaves both unset.
+Production uses `REDIS_KEY_PREFIX=prod:` and `BLOB_PATH_PREFIX=prod/` (set in Vercel env vars).
 
 ### Admin dark mode
 
