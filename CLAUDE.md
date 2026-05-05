@@ -26,6 +26,7 @@ Next.js 14 App Router, TypeScript, Tailwind CSS. Deployed on Vercel. Data and up
 - `ensureSeeded()` runs lazily on the first read of artworks/tags/users/sessions; seeds artworks/tags/about from `src/data/seed.ts`, then independently seeds the admin user from `GALLERY_ADMIN_EMAIL` + `GALLERY_ADMIN_PASSWORD` (the user check is *outside* the artwork check — important so an empty user index still gets seeded after a partial bootstrap).
 - Sessions use Redis TTL via `setex`.
 - Artwork keys: `artwork:{numericId}` (integer); `artworks:index` (Set of stringified IDs); `artworks:slugs` (Hash: slug → numericId); `artworks:counter` (auto-increment integer). `Artwork.id` is a number; `Artwork.slug` is the URL-friendly string used in public routes.
+- Prod uses `REDIS_KEY_PREFIX=prod:` and `BLOB_PATH_PREFIX=prod/`; dev uses `dev:` / `dev/`. Both isolate from each other on the shared Vercel Redis + Blob instance.
 
 Seed data lives in `src/data/seed.ts`. To reset local dev: `rm .data/store.json && npm run dev`.
 
@@ -56,6 +57,7 @@ Session cookie (`gallery_session`) holds a 32-byte random hex token; stored *has
 Every upload is processed through `sharp`: resized to ≤2000px on the longest edge, converted to WebP (quality 85, metadata stripped). The original is preserved verbatim.
 - **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/{dir}/{uuid}.webp`; original → `public/original/{dir}/{uuid}.{ext}`.
 - **Production / dev with Blob**: WebP → Blob at `{BLOB_PATH_PREFIX}{dir}/{uuid}.webp`; original → Blob at `{BLOB_PATH_PREFIX}original/{dir}/{uuid}.{ext}`. Full Blob URLs stored on the artwork record. Original filename is discarded; `crypto.randomUUID()` is used instead.
+- **Reference images** use the same upload route with `dir=reference/{artwork-id}`. Only the WebP `path` is stored in `artwork.reference.image`; `originalPath` is discarded by `ArtworkForm`, leaving `original/reference/` blobs orphaned.
 
 Response: `{ path, originalPath, width, height }` — dimensions come from sharp output.
 `Artwork.originalImage` stores the original URL alongside `Artwork.image`.
