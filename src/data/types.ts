@@ -6,6 +6,7 @@ export type ArtworkReference = {
   image?: string;
   imageWidth?: number;
   imageHeight?: number;
+  imageFilename?: string;
 };
 
 export type Artwork = {
@@ -18,6 +19,7 @@ export type Artwork = {
   description?: string;
   image: string;
   originalImage?: string;
+  imageFilename?: string;
   width: number;
   height: number;
 

@@ -73,11 +73,12 @@ describe("POST /api/admin/upload", () => {
   it("writes WebP and original to disk in local dev mode", async () => {
     mockSessionsGet.mockResolvedValue({ id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 86400000).toISOString() });
     const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
-    const res = await POST(makeRequest({ file, dir: "artwork", width: "800", height: "600" }));
+    const res = await POST(makeRequest({ file, dir: "artworks/3/images", width: "800", height: "600" }));
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(body.path).toMatch(new RegExp(`^/artwork/${UUID_RE.source}\\.webp$`));
-    expect(body.originalPath).toMatch(new RegExp(`^/original/artwork/${UUID_RE.source}\\.jpg$`));
+    expect(body.path).toMatch(new RegExp(`^/artists/1/artworks/3/images/${UUID_RE.source}\\.webp$`));
+    expect(body.originalPath).toMatch(new RegExp(`^/artists/1/artworks/3/images/original/${UUID_RE.source}\\.jpg$`));
+    expect(body.originalFilename).toBe("photo.jpg");
     expect(mockWriteFile).toHaveBeenCalledTimes(2);
   });
 
@@ -85,11 +86,12 @@ describe("POST /api/admin/upload", () => {
     process.env.BLOB_READ_WRITE_TOKEN = "tok";
     mockSessionsGet.mockResolvedValue({ id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 86400000).toISOString() });
     const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
-    const res = await POST(makeRequest({ file, dir: "artwork", width: "800", height: "600" }));
+    const res = await POST(makeRequest({ file, dir: "artworks/3/images", width: "800", height: "600" }));
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.path).toContain("blob.example.com");
     expect(body.originalPath).toContain("blob.example.com");
+    expect(body.originalFilename).toBe("photo.jpg");
     expect(mockPut).toHaveBeenCalledTimes(2);
   });
 
@@ -98,9 +100,9 @@ describe("POST /api/admin/upload", () => {
     process.env.BLOB_PATH_PREFIX = "dev/";
     mockSessionsGet.mockResolvedValue({ id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 86400000).toISOString() });
     const file = new File(["pixel"], "photo.jpg", { type: "image/jpeg" });
-    await POST(makeRequest({ file, dir: "artwork" }));
+    await POST(makeRequest({ file, dir: "artworks/3/images" }));
     expect(mockPut).toHaveBeenCalledWith(
-      expect.stringMatching(new RegExp(`^dev/artwork/${UUID_RE.source}\\.webp$`)),
+      expect.stringMatching(new RegExp(`^dev/artists/1/artworks/3/images/${UUID_RE.source}\\.webp$`)),
       expect.anything(),
       expect.anything(),
     );
@@ -112,6 +114,7 @@ describe("POST /api/admin/upload", () => {
     const res = await POST(makeRequest({ file, dir: "../../etc/passwd" }));
     const body = await res.json();
     expect(body.path).not.toContain("..");
+    expect(body.originalFilename).toBe("photo.jpg");
   });
 
   it("resizes image when longest edge exceeds 2000px", async () => {

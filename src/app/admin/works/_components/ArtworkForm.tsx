@@ -36,6 +36,8 @@ export default function ArtworkForm(props: Props) {
   const isEdit = props.mode === "edit";
   const src = isEdit ? props.artwork : null;
 
+  const [pendingId] = useState(() => crypto.randomUUID());
+
   const [form, setForm] = useState({
     id: src?.id ?? 0,
     slug: src?.slug ?? "",
@@ -46,6 +48,7 @@ export default function ArtworkForm(props: Props) {
     description: src?.description ?? "",
     image: src?.image ?? "",
     originalImage: src?.originalImage ?? "",
+    imageFilename: src?.imageFilename ?? "",
     width: src?.width ?? 0,
     height: src?.height ?? 0,
     status: (src?.status ?? "live") as "live" | "draft" | "hidden",
@@ -60,6 +63,7 @@ export default function ArtworkForm(props: Props) {
     path: src?.reference?.image ?? "",
     width: src?.reference?.imageWidth ?? 0,
     height: src?.reference?.imageHeight ?? 0,
+    filename: src?.reference?.imageFilename ?? "",
   });
 
   const [slugManuallySet, setSlugManuallySet] = useState(isEdit);
@@ -90,10 +94,11 @@ export default function ArtworkForm(props: Props) {
       fd.append("file", file);
       fd.append("width", String(dims.width));
       fd.append("height", String(dims.height));
+      fd.append("dir", `artworks/${form.id || pendingId}/images`);
       const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json() as { path: string; originalPath?: string; width: number; height: number };
-      setForm((f) => ({ ...f, image: data.path, originalImage: data.originalPath ?? "", width: data.width, height: data.height }));
+      const data = await res.json() as { path: string; originalPath?: string; originalFilename?: string; width: number; height: number };
+      setForm((f) => ({ ...f, image: data.path, originalImage: data.originalPath ?? "", imageFilename: data.originalFilename ?? "", width: data.width, height: data.height }));
       setUploadStatus("done");
     } catch {
       setUploadStatus("error");
@@ -110,11 +115,11 @@ export default function ArtworkForm(props: Props) {
       fd.append("file", file);
       fd.append("width", String(dims.width));
       fd.append("height", String(dims.height));
-      fd.append("dir", `reference/${form.id}`);
+      fd.append("dir", `artworks/${form.id}/references`);
       const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json() as { path: string; width: number; height: number };
-      setReferenceImage({ path: data.path, width: data.width, height: data.height });
+      const data = await res.json() as { path: string; originalFilename?: string; width: number; height: number };
+      setReferenceImage({ path: data.path, filename: data.originalFilename ?? "", width: data.width, height: data.height });
       setRefUploadStatus("done");
     } catch {
       setRefUploadStatus("error");
@@ -133,6 +138,7 @@ export default function ArtworkForm(props: Props) {
               image: referenceImage.path || undefined,
               imageWidth: referenceImage.width || undefined,
               imageHeight: referenceImage.height || undefined,
+              imageFilename: referenceImage.filename || undefined,
             }
           : null;
 
@@ -146,6 +152,7 @@ export default function ArtworkForm(props: Props) {
         description: form.description || undefined,
         image: form.image,
         originalImage: form.originalImage || undefined,
+        imageFilename: form.imageFilename || undefined,
         width: form.width,
         height: form.height,
         status: form.status,

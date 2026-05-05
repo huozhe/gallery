@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { sessions } from "@/lib/store";
 import { hashSessionToken } from "@/lib/auth";
+import { ARTIST_ID } from "@/lib/config";
 import sharp from "sharp";
 
 const MAX_EDGE = 2000;
@@ -39,26 +40,28 @@ export async function POST(req: Request) {
     .webp({ quality: 85 })
     .toBuffer({ resolveWithObject: true });
 
+  const artistDir = `artists/${ARTIST_ID}`;
+
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     const { put } = await import("@vercel/blob");
     const blobPrefix = process.env.BLOB_PATH_PREFIX ?? "";
     const [{ url: path }, { url: originalPath }] = await Promise.all([
-      put(`${blobPrefix}${dir}/${webpName}`, webpBuffer, {
+      put(`${blobPrefix}${artistDir}/${dir}/${webpName}`, webpBuffer, {
         access: "public",
         allowOverwrite: true,
         contentType: "image/webp",
       }),
-      put(`${blobPrefix}original/${dir}/${origName}`, inputBuffer, {
+      put(`${blobPrefix}${artistDir}/${dir}/original/${origName}`, inputBuffer, {
         access: "public",
         allowOverwrite: true,
       }),
     ]);
-    return Response.json({ path, originalPath, width: info.width, height: info.height });
+    return Response.json({ path, originalPath, originalFilename: file.name, width: info.width, height: info.height });
   } else {
     const { mkdir, writeFile } = await import("fs/promises");
     const pathMod = await import("path");
-    const webpDest = pathMod.join(process.cwd(), "public", dir, webpName);
-    const origDest = pathMod.join(process.cwd(), "public", "original", dir, origName);
+    const webpDest = pathMod.join(process.cwd(), "public", artistDir, dir, webpName);
+    const origDest = pathMod.join(process.cwd(), "public", artistDir, dir, "original", origName);
     await mkdir(pathMod.dirname(webpDest), { recursive: true });
     await mkdir(pathMod.dirname(origDest), { recursive: true });
     await Promise.all([
@@ -66,8 +69,9 @@ export async function POST(req: Request) {
       writeFile(origDest, inputBuffer),
     ]);
     return Response.json({
-      path: `/${dir}/${webpName}`,
-      originalPath: `/original/${dir}/${origName}`,
+      path: `/${artistDir}/${dir}/${webpName}`,
+      originalPath: `/${artistDir}/${dir}/original/${origName}`,
+      originalFilename: file.name,
       width: info.width,
       height: info.height,
     });

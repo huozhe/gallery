@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { ulid } from "ulid";
 import { z } from "zod";
 import { about, artworks, audit, sessions, tags, users } from "@/lib/store";
-import type { AuditAction } from "@/data/types";
+import type { AuditAction, Artwork } from "@/data/types";
 import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
@@ -17,6 +17,23 @@ import {
   requireSession,
   verifyPassword,
 } from "@/lib/auth";
+
+// ---------- blob cleanup ----------
+
+function isBlobUrl(url: string | undefined): url is string {
+  return !!url && url.startsWith("https://") && url.includes("blob.vercel-storage.com");
+}
+
+async function deleteBlobs(urls: (string | undefined)[]): Promise<void> {
+  const toDelete = urls.filter(isBlobUrl);
+  if (!toDelete.length || !process.env.BLOB_READ_WRITE_TOKEN) return;
+  const { del } = await import("@vercel/blob");
+  await del(toDelete);
+}
+
+async function deleteArtworkBlobs(artwork: Artwork): Promise<void> {
+  await deleteBlobs([artwork.image, artwork.originalImage, artwork.reference?.image]);
+}
 
 // ---------- helpers ----------
 
@@ -176,6 +193,7 @@ const SaveArtworkSchema = z.object({
   description: z.string().optional(),
   image: z.string().min(1, "Image required"),
   originalImage: z.string().optional(),
+  imageFilename: z.string().optional(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   status: z.enum(["live", "draft", "hidden"]),
@@ -189,6 +207,7 @@ const SaveArtworkSchema = z.object({
       image: z.string().optional(),
       imageWidth: z.number().int().positive().optional(),
       imageHeight: z.number().int().positive().optional(),
+      imageFilename: z.string().optional(),
     })
     .nullable()
     .optional(),
@@ -219,6 +238,14 @@ export async function saveArtwork(input: unknown): Promise<SaveArtworkResult> {
     if (existing && existing.id !== artworkId) {
       return { success: false, error: `Slug "${d.slug}" already exists` };
     }
+    const stored = await artworks.get(artworkId);
+    if (stored) {
+      await deleteBlobs([
+        stored.image !== d.image ? stored.image : undefined,
+        stored.originalImage !== d.originalImage ? stored.originalImage : undefined,
+        stored.reference?.image !== d.reference?.image ? stored.reference?.image : undefined,
+      ]);
+    }
   }
 
   const now = new Date().toISOString();
@@ -232,6 +259,7 @@ export async function saveArtwork(input: unknown): Promise<SaveArtworkResult> {
     description: d.description || undefined,
     image: d.image,
     originalImage: d.originalImage,
+    imageFilename: d.imageFilename,
     width: d.width,
     height: d.height,
     status: d.status,
@@ -417,7 +445,7 @@ export async function purgeArtwork(id: number): Promise<void> {
   NumericIdSchema.parse(id);
   const before = await artworks.get(id);
   if (!before) return;
-  await artworks.purge(id);
+  await Promise.all([artworks.purge(id), deleteArtworkBlobs(before)]);
   await logAudit("artwork.purge", before.slug, {
     deleted: { from: { id: before.id, title: before.title }, to: null },
   });

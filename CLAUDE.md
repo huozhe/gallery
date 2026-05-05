@@ -55,12 +55,16 @@ Session cookie (`gallery_session`) holds a 32-byte random hex token; stored *has
 `next/image` is used everywhere. Upload endpoint: `POST /api/admin/upload`.
 
 Every upload is processed through `sharp`: resized to ≤2000px on the longest edge, converted to WebP (quality 85, metadata stripped). The original is preserved verbatim.
-- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/{dir}/{uuid}.webp`; original → `public/original/{dir}/{uuid}.{ext}`.
-- **Production / dev with Blob**: WebP → Blob at `{BLOB_PATH_PREFIX}{dir}/{uuid}.webp`; original → Blob at `{BLOB_PATH_PREFIX}original/{dir}/{uuid}.{ext}`. Full Blob URLs stored on the artwork record. Original filename is discarded; `crypto.randomUUID()` is used instead.
-- **Reference images** use the same upload route with `dir=reference/{artwork-id}`. Only the WebP `path` is stored in `artwork.reference.image`; `originalPath` is discarded by `ArtworkForm`, leaving `original/reference/` blobs orphaned.
+- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/artists/{ARTIST_ID}/{dir}/{uuid}.webp`; original → `public/artists/{ARTIST_ID}/{dir}/original/{uuid}.{ext}`.
+- **Production / dev with Blob**: WebP → Blob at `{BLOB_PATH_PREFIX}artists/{ARTIST_ID}/{dir}/{uuid}.webp`; original → Blob at `{BLOB_PATH_PREFIX}artists/{ARTIST_ID}/{dir}/original/{uuid}.{ext}`. Full Blob URLs stored on the artwork record. UUID filename used for the blob; original filename stored as `imageFilename` on the artwork record.
+- **`ARTIST_ID`** is exported from `src/lib/config.ts` (currently `1`; becomes dynamic in the multi-tenant phase).
+- **Artwork images** use `dir=artworks/{id}/images`; **reference images** use `dir=artworks/{id}/references`. Both require a saved artwork ID (same pattern).
+- **New artwork creation**: main image upload uses `dir=artworks/{pendingId}/images` where `pendingId` is a client-side UUID generated at form mount. This means newly created artworks have a UUID-keyed blob dir until the image is replaced on the edit page.
+- **`Artwork.imageFilename`** and **`ArtworkReference.imageFilename`** store the original upload filename as metadata in Redis (never exposed to visitors).
 
-Response: `{ path, originalPath, width, height }` — dimensions come from sharp output.
+Response: `{ path, originalPath, originalFilename, width, height }` — dimensions come from sharp output.
 `Artwork.originalImage` stores the original URL alongside `Artwork.image`.
+`Artwork.imageFilename` and `ArtworkReference.imageFilename` store the original upload filename (metadata only, not exposed).
 
 `next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`. To add another external image host, extend that list.
 
