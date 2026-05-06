@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
-npm test         # Vitest (73 tests); npx vitest run --coverage for coverage report
+npm test         # Vitest (82 tests); npx vitest run --coverage for coverage report
 npm run migrate:images  # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
 ```
 
@@ -20,7 +20,7 @@ Next.js 14 App Router, TypeScript, Tailwind CSS. Deployed on Vercel. Data and up
 
 `src/lib/store.ts` is a thin switch — picks `store.kv.ts` (Redis + Blob) when `REDIS_URL` is set, else `store.file.ts` (`.data/store.json`). The exported surface (`artworks`, `tags`, `users`, `sessions`, `audit`, `about`, `blob`, `seed`) is identical across both.
 
-**`store.kv.ts` highlights:**
+**`store.kv.ts` highlights (+ `backupRedis()` export):**
 - Uses `ioredis` against the Vercel marketplace Redis (env var `REDIS_URL`).
 - Wraps the raw client in a `PrefixedRedis` class. Every key is automatically prefixed with `REDIS_KEY_PREFIX` (e.g. `dev:`) — call sites cannot bypass it.
 - `ensureSeeded()` runs lazily on the first read of artworks/tags/users/sessions; seeds artworks/tags/about from `src/data/seed.ts`, then independently seeds the admin user from `GALLERY_ADMIN_EMAIL` + `GALLERY_ADMIN_PASSWORD` (the user check is *outside* the artwork check — important so an empty user index still gets seeded after a partial bootstrap).
@@ -68,6 +68,10 @@ Response: `{ path, originalPath, originalFilename, width, height }` — dimensio
 `Artwork.imageFilename` and `ArtworkReference.imageFilename` store the original upload filename (metadata only, not exposed).
 
 `next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`. To add another external image host, extend that list.
+
+### Backup
+
+`GET /api/admin/backup` — dumps all Redis keys (excluding sessions) to Vercel Blob as `{BLOB_PATH_PREFIX}backup/redis-YYYY-MM-DD.json`. Auth: valid session cookie OR `Authorization: Bearer {CRON_SECRET}`. Returns `{ ok, url, keys }`. `vercel.json` schedules it daily at 02:00 UTC. `CRON_SECRET` must be set manually in the Vercel dashboard (not auto-injected).
 
 ### Tests
 
