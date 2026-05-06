@@ -43,6 +43,19 @@ class PrefixedRedis {
   hset(key: string, field: string, value: string)         { return this.r.hset(this.k(key), field, value); }
   hget(key: string, field: string)                        { return this.r.hget(this.k(key), field); }
   hdel(key: string, field: string)                        { return this.r.hdel(this.k(key), field); }
+  hgetall(key: string)                                    { return this.r.hgetall(this.k(key)); }
+  type(key: string)                                       { return this.r.type(this.k(key)); }
+
+  async scan(pattern: string): Promise<string[]> {
+    const all: string[] = [];
+    let cursor = "0";
+    do {
+      const [next, keys] = await this.r.scan(cursor, "MATCH", this.k(pattern), "COUNT", 100);
+      cursor = next;
+      all.push(...keys.map((k) => k.slice(PREFIX.length)));
+    } while (cursor !== "0");
+    return all;
+  }
 }
 
 // Reuse connection across requests (required for serverless warm instances).
@@ -410,3 +423,48 @@ export const blob = {
     throw new Error("Use the upload route to upload files via Vercel Blob.");
   },
 };
+
+// ---------- backup ----------
+
+export type BackupEntry =
+  | { type: "string"; value: string }
+  | { type: "set"; value: string[] }
+  | { type: "hash"; value: Record<string, string> }
+  | { type: "list"; value: string[] };
+
+export type BackupData = {
+  timestamp: string;
+  prefix: string;
+  data: Record<string, BackupEntry>;
+};
+
+export async function backupRedis(): Promise<BackupData> {
+  const r = getClient();
+  const keys = await r.scan("*");
+  const data: Record<string, BackupEntry> = {};
+  for (const key of keys) {
+    if (key.startsWith("session:")) continue;
+    const type = await r.type(key);
+    let entry: BackupEntry | null = null;
+    switch (type) {
+      case "string": {
+        const v = await r.get(key);
+        if (v !== null) entry = { type: "string", value: v };
+        break;
+      }
+      case "set":
+        entry = { type: "set", value: await r.smembers(key) };
+        break;
+      case "hash": {
+        const h = await r.hgetall(key);
+        if (h) entry = { type: "hash", value: h };
+        break;
+      }
+      case "list":
+        entry = { type: "list", value: await r.lrange(key, 0, -1) };
+        break;
+    }
+    if (entry) data[key] = entry;
+  }
+  return { timestamp: new Date().toISOString(), prefix: PREFIX, data };
+}
