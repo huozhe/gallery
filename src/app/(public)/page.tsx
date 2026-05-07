@@ -1,4 +1,5 @@
 import GalleryGrid from "@/components/GalleryGrid";
+import SlideshowButton from "@/components/SlideshowButton";
 import { artworks, tags } from "@/lib/store";
 
 function toRoman(n: number): string {
@@ -30,11 +31,20 @@ export default async function Home() {
     }))
     .filter(({ works }) => works.length > 0);
 
+  const seen = new Set<number>();
+  const slideshowWorks = rooms
+    .flatMap(({ works }) => works)
+    .filter((w) => {
+      if (seen.has(w.id)) return false;
+      seen.add(w.id);
+      return true;
+    });
+
   return (
     <main className="px-8 py-12">
-      {rooms.length > 1 && (
-        <div className="flex flex-wrap gap-2 mb-10">
-          {rooms.map(({ tag, works }) => (
+      {slideshowWorks.length > 0 && (
+        <div className="flex items-center gap-2 mb-10">
+          {rooms.length > 1 && rooms.map(({ tag, works }) => (
             <a
               key={tag.id}
               href={`#room-${tag.id}`}
@@ -43,6 +53,8 @@ export default async function Home() {
               {tag.title} · {works.length}
             </a>
           ))}
+          <div className="flex-1" />
+          <SlideshowButton artworks={slideshowWorks} />
         </div>
       )}
 
