@@ -43,18 +43,19 @@ process.env.REDIS_KEY_PREFIX = "test:";
 process.env.GALLERY_ADMIN_EMAIL = "admin@test.com";
 process.env.GALLERY_ADMIN_PASSWORD = "testpass123";
 
-// Reset the global client before import so each test file gets a fresh instance
-delete (globalThis as Record<string, unknown>)._redisClient;
+// Reset the global raw connection before import so each test file gets a fresh instance
+delete (globalThis as Record<string, unknown>)._redisRaw;
 
-const { artworks, tags, users, sessions, audit, about, blob } = await import("@/lib/store.kv");
+const { artworks, tags, users, sessions, audit, about, blob, _seededPrefixes } = await import("@/lib/store.kv");
 
 function clearAll() {
   for (const k of Object.keys(store)) delete store[k];
   for (const k of Object.keys(sets)) delete sets[k];
   for (const k of Object.keys(lists)) delete lists[k];
   for (const k of Object.keys(hashes)) delete hashes[k];
-  // Reset seeded flag by deleting the module cache is not possible in Vitest easily,
-  // so we ensure artworks index is empty to trigger re-seed checks.
+  // Do NOT clear _seededPrefixes: keeping seeded state across tests prevents
+  // ensureSeeded() from re-seeding into a cleared store, which would restore
+  // explicitly purged records and break tests like "purges an artwork".
 }
 
 const BASE_TAG = {

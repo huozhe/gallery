@@ -3,7 +3,8 @@ import { vi } from "vitest";
 // Mock Next.js server-only modules
 vi.mock("next/headers", () => ({
   cookies: vi.fn(),
-  headers: vi.fn(),
+  // Default: returns null for all headers → callers fall back to env vars.
+  headers: vi.fn().mockResolvedValue({ get: () => null }),
 }));
 
 vi.mock("next/navigation", () => ({

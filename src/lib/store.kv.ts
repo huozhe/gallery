@@ -5,6 +5,7 @@
 import Redis from "ioredis";
 import { put } from "@vercel/blob";
 import { ulid } from "ulid";
+import { headers } from "next/headers";
 import type {
   AboutContent,
   Artwork,
@@ -15,16 +16,15 @@ import type {
 } from "@/data/types";
 import { seedAbout, seedArtworks, seedTags } from "@/data/seed";
 import { SESSION_TTL_SECONDS } from "@/lib/session-config";
+import { getTenantFromHeaders } from "@/lib/tenant";
 
 const AUDIT_CAP = 5000;
 
-// Wraps ioredis and prepends REDIS_KEY_PREFIX to every key automatically.
+// Wraps ioredis and prepends prefix to every key automatically.
 // All code uses PrefixedRedis — raw string keys can never bypass the prefix.
-const PREFIX = process.env.REDIS_KEY_PREFIX ?? "";
-
 class PrefixedRedis {
-  constructor(private r: Redis) {}
-  private k(key: string) { return `${PREFIX}${key}`; }
+  constructor(private r: Redis, readonly prefix: string) {}
+  private k(key: string) { return `${this.prefix}${key}`; }
 
   get(key: string)                                        { return this.r.get(this.k(key)); }
   set(key: string, val: string)                           { return this.r.set(this.k(key), val); }
@@ -54,31 +54,45 @@ class PrefixedRedis {
     do {
       const [next, keys] = await this.r.scan(cursor, "MATCH", this.k(pattern), "COUNT", 100);
       cursor = next;
-      all.push(...keys.map((k) => k.slice(PREFIX.length)));
+      all.push(...keys.map((k) => k.slice(this.prefix.length)));
     } while (cursor !== "0");
     return all;
   }
 }
 
-// Reuse connection across requests (required for serverless warm instances).
+// Raw ioredis connection — singleton shared across all tenants and requests.
+// Creating a new connection per request would be prohibitively expensive on serverless.
 declare global {
   // eslint-disable-next-line no-var
-  var _redisClient: PrefixedRedis | undefined;
+  var _redisRaw: Redis | undefined;
 }
 
-function getClient(): PrefixedRedis {
+function getRawConnection(): Redis {
   if (!process.env.REDIS_URL) {
     throw new Error("REDIS_URL is not set");
   }
-  if (!globalThis._redisClient) {
-    const raw = new Redis(process.env.REDIS_URL, {
+  if (!globalThis._redisRaw) {
+    globalThis._redisRaw = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 3,
       enableReadyCheck: false,
       lazyConnect: true,
     });
-    globalThis._redisClient = new PrefixedRedis(raw);
   }
-  return globalThis._redisClient;
+  return globalThis._redisRaw;
+}
+
+// Returns a PrefixedRedis scoped to the current tenant's prefix.
+// Reads from x-tenant-redis-prefix header (stamped by middleware).
+// Falls back to REDIS_KEY_PREFIX env var when called outside a request context.
+async function getClient(): Promise<PrefixedRedis> {
+  let prefix = process.env.REDIS_KEY_PREFIX ?? "";
+  try {
+    const h = await headers();
+    prefix = getTenantFromHeaders(h).redisPrefix;
+  } catch {
+    // Outside request context (scripts, tests) — env var fallback applies.
+  }
+  return new PrefixedRedis(getRawConnection(), prefix);
 }
 
 // ---------- JSON helpers ----------
@@ -93,11 +107,11 @@ function de<T>(value: string | null): T | null {
 }
 
 async function get<T>(key: string): Promise<T | null> {
-  return de<T>(await getClient().get(key));
+  return de<T>(await (await getClient()).get(key));
 }
 
 async function set(key: string, value: unknown, exSeconds?: number): Promise<void> {
-  const r = getClient();
+  const r = await getClient();
   if (exSeconds) {
     await r.setex(key, exSeconds, ser(value));
   } else {
@@ -107,17 +121,21 @@ async function set(key: string, value: unknown, exSeconds?: number): Promise<voi
 
 async function mget<T>(keys: string[]): Promise<(T | null)[]> {
   if (!keys.length) return [];
-  const raw = await getClient().mget(...keys);
+  const raw = await (await getClient()).mget(...keys);
   return raw.map((v) => de<T>(v));
 }
 
 // ---------- seeding ----------
 
-let seeded = false;
+// Keyed by prefix so each tenant seeds independently.
+const seeded = new Set<string>();
+
+// Exported for test teardown only (clear between tests).
+export const _seededPrefixes = seeded;
 
 async function ensureSeeded(): Promise<void> {
-  if (seeded) return;
-  const r = getClient();
+  const r = await getClient();
+  if (seeded.has(r.prefix)) return;
   const count = await r.scard("artworks:index");
   if (count === 0) {
     for (const tag of seedTags) {
@@ -151,13 +169,13 @@ async function ensureSeeded(): Promise<void> {
     await set(`user:${user.email}`, user);
     await r.sadd("users:index", user.email);
   }
-  seeded = true;
+  seeded.add(r.prefix);
 }
 
 // ---------- seed (public, used by migrate script) ----------
 
 export async function seed(): Promise<{ tags: number; artworks: number }> {
-  const r = getClient();
+  const r = await getClient();
   let addedTags = 0;
   let addedArtworks = 0;
   for (const tag of seedTags) {
@@ -190,7 +208,7 @@ export const artworks = {
     opts: { status?: Artwork["status"]; trashed?: boolean; tagId?: string } = {}
   ): Promise<Artwork[]> {
     await ensureSeeded();
-    const r = getClient();
+    const r = await getClient();
     const ids = await r.smembers("artworks:index");
     if (!ids.length) return [];
     let list = (await mget<Artwork>(ids.map((id) => `artwork:${id}`))).filter(
@@ -214,18 +232,18 @@ export const artworks = {
 
   async getBySlug(slug: string): Promise<Artwork | null> {
     await ensureSeeded();
-    const r = getClient();
+    const r = await getClient();
     const idStr = await r.hget("artworks:slugs", slug);
     if (!idStr) return null;
     return get<Artwork>(`artwork:${idStr}`);
   },
 
   async nextId(): Promise<number> {
-    return await getClient().incr("artworks:counter");
+    return (await getClient()).incr("artworks:counter");
   },
 
   async upsert(record: Artwork): Promise<Artwork> {
-    const r = getClient();
+    const r = await getClient();
     const existing = await get<Artwork>(`artwork:${record.id}`);
     const now = new Date().toISOString();
     const next: Artwork = {
@@ -257,7 +275,7 @@ export const artworks = {
   },
 
   async purge(id: number): Promise<void> {
-    const r = getClient();
+    const r = await getClient();
     const existing = await get<Artwork>(`artwork:${id}`);
     if (existing) await r.hdel("artworks:slugs", existing.slug);
     await r.del(`artwork:${id}`);
@@ -270,7 +288,7 @@ export const artworks = {
 export const tags = {
   async list(opts: { visible?: boolean; primaryRoom?: boolean } = {}): Promise<Tag[]> {
     await ensureSeeded();
-    const r = getClient();
+    const r = await getClient();
     const ids = await r.smembers("tags:index");
     if (!ids.length) return [];
     let list = (await mget<Tag>(ids.map((id) => `tag:${id}`))).filter(
@@ -288,7 +306,7 @@ export const tags = {
   },
 
   async upsert(record: Tag): Promise<Tag> {
-    const r = getClient();
+    const r = await getClient();
     const existing = await get<Tag>(`tag:${record.id}`);
     const now = new Date().toISOString();
     const next: Tag = {
@@ -302,7 +320,7 @@ export const tags = {
   },
 
   async delete(id: string): Promise<void> {
-    const r = getClient();
+    const r = await getClient();
     await r.del(`tag:${id}`);
     await r.srem("tags:index", id);
     const ids = await r.smembers("artworks:index");
@@ -325,7 +343,7 @@ export const tags = {
 export const users = {
   async list(): Promise<User[]> {
     await ensureSeeded();
-    const r = getClient();
+    const r = await getClient();
     const emails = await r.smembers("users:index");
     if (!emails.length) return [];
     return (await mget<User>(emails.map((e) => `user:${e}`))).filter(
@@ -340,7 +358,7 @@ export const users = {
 
   async getById(id: string): Promise<User | null> {
     await ensureSeeded();
-    const r = getClient();
+    const r = await getClient();
     const emails = await r.smembers("users:index");
     if (!emails.length) return null;
     const records = await mget<User>(emails.map((e) => `user:${e}`));
@@ -348,14 +366,14 @@ export const users = {
   },
 
   async upsert(record: User): Promise<User> {
-    const r = getClient();
+    const r = await getClient();
     await set(`user:${record.email.toLowerCase()}`, record);
     await r.sadd("users:index", record.email.toLowerCase());
     return record;
   },
 
   async delete(email: string): Promise<void> {
-    const r = getClient();
+    const r = await getClient();
     await r.del(`user:${email.toLowerCase()}`);
     await r.srem("users:index", email.toLowerCase());
   },
@@ -369,7 +387,7 @@ export const sessions = {
     const s = await get<Session>(`session:${tokenHash}`);
     if (!s) return null;
     if (new Date(s.expiresAt).getTime() < Date.now()) {
-      await getClient().del(`session:${tokenHash}`);
+      await (await getClient()).del(`session:${tokenHash}`);
       return null;
     }
     return s;
@@ -381,7 +399,7 @@ export const sessions = {
   },
 
   async delete(tokenHash: string): Promise<void> {
-    await getClient().del(`session:${tokenHash}`);
+    await (await getClient()).del(`session:${tokenHash}`);
   },
 };
 
@@ -389,13 +407,13 @@ export const sessions = {
 
 export const audit = {
   async log(entry: AuditEntry): Promise<void> {
-    const r = getClient();
+    const r = await getClient();
     await r.lpush("audit:log", ser(entry));
     await r.ltrim("audit:log", 0, AUDIT_CAP - 1);
   },
 
   async list(limit = 200): Promise<AuditEntry[]> {
-    const raw = await getClient().lrange("audit:log", 0, limit - 1);
+    const raw = await (await getClient()).lrange("audit:log", 0, limit - 1);
     return raw.map((v) => de<AuditEntry>(v)).filter((e): e is AuditEntry => e !== null);
   },
 };
@@ -441,7 +459,7 @@ export type BackupData = {
 };
 
 export async function backupRedis(): Promise<BackupData> {
-  const r = getClient();
+  const r = await getClient();
   const keys = await r.scan("*");
   const data: Record<string, BackupEntry> = {};
   for (const key of keys) {
@@ -468,11 +486,18 @@ export async function backupRedis(): Promise<BackupData> {
     }
     if (entry) data[key] = entry;
   }
-  return { timestamp: new Date().toISOString(), prefix: PREFIX, data };
+  return { timestamp: new Date().toISOString(), prefix: r.prefix, data };
 }
 
 export async function restoreRedis(data: BackupData): Promise<{ keys: number }> {
-  const r = getClient();
+  const r = await getClient();
+
+  if (data.prefix && data.prefix !== r.prefix) {
+    throw new Error(
+      `Backup prefix "${data.prefix}" does not match current tenant prefix "${r.prefix}". ` +
+      `Log in to the correct tenant admin to restore this backup.`
+    );
+  }
 
   // delete all non-session keys under the current prefix
   const existing = await r.scan("*");

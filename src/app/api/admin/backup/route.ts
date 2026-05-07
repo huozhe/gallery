@@ -1,5 +1,6 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { del, list, put } from "@vercel/blob";
+import { getTenantFromHeaders } from "@/lib/tenant";
 
 const BACKUP_RETENTION = 30;
 import { sessions } from "@/lib/store";
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
   const keyCount = Object.keys(backup.data).length;
   const body = JSON.stringify(backup, null, 2);
   const date = new Date().toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
-  const prefix = process.env.BLOB_PATH_PREFIX ?? "";
+  const prefix = getTenantFromHeaders(await headers()).blobPrefix;
   const pathname = `${prefix}backup/redis-${date}.json`;
 
   let url: string | null = null;

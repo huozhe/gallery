@@ -1,4 +1,4 @@
-// Local-dev store backed by a JSON file on disk (.data/store.json).
+// Local-dev store backed by a JSON file on disk (.data/{tenantId}/store.json).
 // This is the option-B fallback: matches the API surface the spec requires
 // (Vercel KV + Blob), but persists to disk so the site works locally.
 //
@@ -8,10 +8,11 @@
 // No in-memory cache: every operation reads-then-writes atomically. This
 // keeps multi-process scenarios (dev server + a CLI script writing concurrently)
 // safe enough for local dev. Writes within a single process are serialized
-// via writeChain.
+// via per-tenant write chains.
 
 import { promises as fs } from "fs";
 import path from "path";
+import { headers } from "next/headers";
 import type {
   AboutContent,
   Artwork,
@@ -21,6 +22,7 @@ import type {
   User,
 } from "@/data/types";
 import { seedAbout, seedArtworks, seedTags } from "@/data/seed";
+import { getTenantFromHeaders } from "@/lib/tenant";
 
 type StoreData = {
   artworks: Record<string, Artwork>; // keyed by stringified numeric id
@@ -32,38 +34,55 @@ type StoreData = {
   about?: AboutContent;
 };
 
-const DATA_FILE = path.join(process.cwd(), ".data", "store.json");
 const AUDIT_CAP = 5000;
 
-let writeChain: Promise<void> = Promise.resolve();
+// Per-tenant write chains, keyed by resolved file path.
+const writeChains = new Map<string, Promise<void>>();
 
 function emptyData(): StoreData {
   return { artworks: {}, artworkCounter: 0, tags: {}, users: {}, sessions: {}, audit: [] };
 }
 
-async function readFile(): Promise<StoreData> {
+async function getDataFile(): Promise<string> {
   try {
-    const raw = await fs.readFile(DATA_FILE, "utf8");
+    const h = await headers();
+    const tenant = getTenantFromHeaders(h);
+    if (tenant.id !== "default") {
+      return path.join(process.cwd(), ".data", tenant.id, "store.json");
+    }
+  } catch {
+    // Outside request context (scripts, tests) — use default path.
+  }
+  return path.join(process.cwd(), ".data", "store.json");
+}
+
+async function readFile(): Promise<StoreData> {
+  const dataFile = await getDataFile();
+  try {
+    const raw = await fs.readFile(dataFile, "utf8");
     return { ...emptyData(), ...(JSON.parse(raw) as Partial<StoreData>) };
   } catch {
     return emptyData();
   }
 }
 
-async function persist(data: StoreData): Promise<void> {
-  await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
+async function persist(dataFile: string, data: StoreData): Promise<void> {
+  await fs.mkdir(path.dirname(dataFile), { recursive: true });
+  await fs.writeFile(dataFile, JSON.stringify(data, null, 2), "utf8");
 }
 
-/** Read latest from disk, run mutator, write back. Serialized per-process. */
+/** Read latest from disk, run mutator, write back. Serialized per tenant. */
 async function update<T>(mutator: (data: StoreData) => T | Promise<T>): Promise<T> {
+  const dataFile = await getDataFile();
   let result!: T;
-  writeChain = writeChain.then(async () => {
+  const prev = writeChains.get(dataFile) ?? Promise.resolve();
+  const next = prev.then(async () => {
     const data = await readFile();
     result = await mutator(data);
-    await persist(data);
+    await persist(dataFile, data);
   });
-  await writeChain;
+  writeChains.set(dataFile, next);
+  await next;
   return result;
 }
 

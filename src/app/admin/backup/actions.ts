@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { del, list, put } from "@vercel/blob";
 import { ulid } from "ulid";
+import { headers } from "next/headers";
+import { getTenantFromHeaders } from "@/lib/tenant";
 
 const BACKUP_RETENTION = 30;
 
@@ -28,7 +30,7 @@ export async function triggerBackup(): Promise<{ ok: boolean; url: string | null
   const keyCount = Object.keys(backup.data).length;
   const body = JSON.stringify(backup, null, 2);
   const date = new Date().toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
-  const prefix = process.env.BLOB_PATH_PREFIX ?? "";
+  const prefix = getTenantFromHeaders(await headers()).blobPrefix;
   const pathname = `${prefix}backup/redis-${date}.json`;
 
   let url: string | null = null;

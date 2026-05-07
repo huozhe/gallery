@@ -1,7 +1,7 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { sessions } from "@/lib/store";
 import { hashSessionToken } from "@/lib/auth";
-import { ARTIST_BLOB_ID } from "@/lib/config";
+import { getTenantFromHeaders } from "@/lib/tenant";
 import sharp from "sharp";
 
 const MAX_EDGE = 2000;
@@ -40,11 +40,13 @@ export async function POST(req: Request) {
     .webp({ quality: 85 })
     .toBuffer({ resolveWithObject: true });
 
-  const artistDir = `artists/${ARTIST_BLOB_ID}`;
+  const h = await headers();
+  const tenant = getTenantFromHeaders(h);
+  const artistDir = `artists/${tenant.blobId}`;
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     const { put } = await import("@vercel/blob");
-    const blobPrefix = process.env.BLOB_PATH_PREFIX ?? "";
+    const blobPrefix = tenant.blobPrefix;
     const [{ url: path }, { url: originalPath }] = await Promise.all([
       put(`${blobPrefix}${artistDir}/${dir}/${webpName}`, webpBuffer, {
         access: "public",

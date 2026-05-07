@@ -1,4 +1,6 @@
 import { requireSession } from "@/lib/auth";
+import { headers } from "next/headers";
+import { getTenantFromHeaders } from "@/lib/tenant";
 import BackupManager from "./_components/BackupManager";
 
 export const dynamic = "force-dynamic";
@@ -6,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function BackupPage() {
   await requireSession("/admin/backup");
 
-  const prefix = process.env.BLOB_PATH_PREFIX ?? "";
+  const prefix = getTenantFromHeaders(await headers()).blobPrefix;
   const hasBlobToken = !!process.env.BLOB_READ_WRITE_TOKEN;
   const hasRedis = !!process.env.REDIS_URL;
 
