@@ -16,7 +16,9 @@ vi.mock("@/lib/store.kv", () => ({
 }));
 
 const mockPut = vi.fn(async (path: string) => ({ url: `https://blob.example.com/${path}` }));
-vi.mock("@vercel/blob", () => ({ put: mockPut }));
+const mockList = vi.fn(async () => ({ blobs: [] }));
+const mockDel = vi.fn(async () => {});
+vi.mock("@vercel/blob", () => ({ put: mockPut, list: mockList, del: mockDel }));
 
 const { GET } = await import("@/app/api/admin/backup/route");
 

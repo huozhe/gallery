@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { triggerBackup, triggerRestore } from "../actions";
+import { deleteBackup, triggerBackup, triggerRestore } from "../actions";
 
 type BlobItem = {
   url: string;
@@ -66,6 +66,20 @@ export default function BackupManager({
     });
   }
 
+  function handleDelete(blob: BlobItem) {
+    const date = backupDate(blob.pathname);
+    if (!window.confirm(`Delete backup ${date}?`)) return;
+    startTransition(async () => {
+      setStatus(null);
+      try {
+        await deleteBackup(blob.url);
+        setStatus({ ok: true, message: `Deleted ${date}.` });
+      } catch (e) {
+        setStatus({ ok: false, message: String(e) });
+      }
+    });
+  }
+
   return (
     <div className="space-y-6">
       {/* Backup now */}
@@ -122,13 +136,22 @@ export default function BackupManager({
                   {new Date(blob.uploadedAt).toLocaleString()}
                 </td>
                 <td className="py-2 pl-4 text-right">
-                  <button
-                    onClick={() => handleRestore(blob)}
-                    disabled={pending || !hasRedis}
-                    className="text-sm text-red-600 hover:text-red-800 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Restore
-                  </button>
+                  <div className="flex items-center justify-end gap-4">
+                    <button
+                      onClick={() => handleRestore(blob)}
+                      disabled={pending || !hasRedis}
+                      className="text-sm text-red-600 hover:text-red-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Restore
+                    </button>
+                    <button
+                      onClick={() => handleDelete(blob)}
+                      disabled={pending}
+                      className="text-sm text-neutral-400 hover:text-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
-import { put } from "@vercel/blob";
+import { del, list, put } from "@vercel/blob";
+
+const BACKUP_RETENTION = 30;
 import { sessions } from "@/lib/store";
 import { hashSessionToken } from "@/lib/auth";
 import { SESSION_COOKIE } from "@/lib/session-config";
@@ -38,6 +40,13 @@ export async function GET(req: Request) {
       allowOverwrite: true,
     });
     url = result.url;
+
+    const { blobs } = await list({ prefix: `${prefix}backup/` });
+    const stale = blobs
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+      .slice(BACKUP_RETENTION)
+      .map((b) => b.url);
+    if (stale.length > 0) await del(stale);
   }
 
   return Response.json({ ok: true, url, keys: keyCount });

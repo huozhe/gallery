@@ -1,8 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { put } from "@vercel/blob";
+import { del, list, put } from "@vercel/blob";
 import { ulid } from "ulid";
+
+const BACKUP_RETENTION = 30;
+
+async function purgeOldBackups(prefix: string): Promise<void> {
+  const { blobs } = await list({ prefix: `${prefix}backup/` });
+  const sorted = blobs.sort(
+    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
+  );
+  const stale = sorted.slice(BACKUP_RETENTION).map((b) => b.url);
+  if (stale.length > 0) await del(stale);
+}
 import { requireSession } from "@/lib/auth";
 import { audit } from "@/lib/store";
 import type { BackupData } from "@/lib/store.kv";
@@ -28,6 +39,7 @@ export async function triggerBackup(): Promise<{ ok: boolean; url: string | null
       allowOverwrite: true,
     });
     url = result.url;
+    await purgeOldBackups(prefix);
   }
 
   revalidatePath("/admin/backup");
@@ -70,4 +82,10 @@ export async function triggerRestore(blobUrl: string): Promise<{ ok: boolean; ke
 
   revalidatePath("/admin/backup");
   return { ok: true, keys };
+}
+
+export async function deleteBackup(url: string): Promise<void> {
+  await requireSession("/admin/backup");
+  await del(url);
+  revalidatePath("/admin/backup");
 }
