@@ -8,43 +8,78 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
-npm test         # Vitest (89 tests); npx vitest run --coverage for coverage report
+npm test         # Vitest (97 tests); npx vitest run --coverage for coverage report
 npm run migrate:images  # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
 ```
 
 ## Architecture
 
-Next.js 14 App Router, TypeScript, Tailwind CSS. Deployed on Vercel. Data and uploaded images are persisted in Redis + Vercel Blob in production; local dev uses a JSON file + the local `public/` folder. All types live in `src/data/types.ts`; all DB operations go through `src/lib/store.ts`.
+Next.js 16 App Router, TypeScript, Tailwind CSS. Deployed on Vercel. Data and uploaded images are persisted in Redis + Vercel Blob in production; local dev uses a JSON file + the local `public/` folder. All types live in `src/data/types.ts`; all DB operations go through `src/lib/store.ts`.
+
+### Multi-Tenancy
+
+The app supports multiple artists via host-header routing. Each artist gets their own subdomain/domain with isolated Redis data and Vercel Blob storage.
+
+**`src/lib/tenant.ts`** — `Tenant` type + `GALLERY_TENANTS` env-var registry (JSON array). Parsed once at module load (edge-compatible). `resolveTenant(host)` used by the proxy; `getTenantFromHeaders(h)` used by route handlers and server actions. Falls back to legacy `REDIS_KEY_PREFIX` / `BLOB_PATH_PREFIX` / `ARTIST_BLOB_ID` env vars when `GALLERY_TENANTS` is unset.
+
+**`src/proxy.ts`** — Next.js 16 proxy (file must be `proxy.ts`, export must be `proxy`). Reads `Host` header, resolves tenant, stamps five `x-tenant-*` headers on the **request** object via `NextResponse.next({ request: { headers } })` so they are readable via `await headers()` in server components. Also handles `/admin` cookie-presence guard.
+
+**Tenant headers** (server-side only, never sent to browser):
+- `x-tenant-id`, `x-tenant-name`
+- `x-tenant-redis-prefix` — e.g. `prod:roamingbrush:`
+- `x-tenant-blob-prefix` — e.g. `prod/roamingbrush/`
+- `x-tenant-blob-id` — UUID for blob path (per-artist)
+
+**`GALLERY_TENANTS` format:**
+```json
+[
+  {
+    "id": "roamingbrush",
+    "hostnames": ["roamingbrush.com", "gallery-alpha-five.vercel.app"],
+    "name": "Roaming Brush",
+    "redisPrefix": "prod:roamingbrush:",
+    "blobPrefix": "prod/roamingbrush/",
+    "blobId": "00000000-0000-0000-0000-0000000000ff"
+  }
+]
+```
 
 ### Storage
 
-`src/lib/store.ts` is a thin switch — picks `store.kv.ts` (Redis + Blob) when `REDIS_URL` is set, else `store.file.ts` (`.data/store.json`). The exported surface (`artworks`, `tags`, `users`, `sessions`, `audit`, `about`, `blob`, `seed`) is identical across both.
+`src/lib/store.ts` is a thin switch — picks `store.kv.ts` (Redis + Blob) when `REDIS_URL` is set, else `store.file.ts` (`.data/{tenantId}/store.json`). The exported surface (`artworks`, `tags`, `users`, `sessions`, `audit`, `about`, `blob`, `seed`) is identical across both.
 
-**`store.kv.ts` highlights (+ `backupRedis()` export):**
+**`store.kv.ts` highlights (+ `backupRedis()` / `restoreRedis()` exports):**
 - Uses `ioredis` against the Vercel marketplace Redis (env var `REDIS_URL`).
-- Wraps the raw client in a `PrefixedRedis` class. Every key is automatically prefixed with `REDIS_KEY_PREFIX` (e.g. `dev:`) — call sites cannot bypass it.
-- `ensureSeeded()` runs lazily on the first read of artworks/tags/users/sessions; seeds artworks/tags/about from `src/data/seed.ts`, then independently seeds the admin user from `GALLERY_ADMIN_EMAIL` + `GALLERY_ADMIN_PASSWORD` (the user check is *outside* the artwork check — important so an empty user index still gets seeded after a partial bootstrap).
+- Raw `ioredis` connection is a global singleton (`_redisRaw`). `PrefixedRedis` wrapper is created per-call.
+- `getClient()` is async: reads `x-tenant-redis-prefix` from `await headers()`, falls back to `REDIS_KEY_PREFIX` env var (for scripts/tests outside request context).
+- `PrefixedRedis` takes `prefix` as constructor arg and exposes `readonly prefix`. Every key is automatically prefixed — call sites cannot bypass it.
+- `ensureSeeded()` is keyed by prefix (`seeded: Set<string>`); each tenant seeds independently on first request.
 - Sessions use Redis TTL via `setex`.
-- Artwork keys: `artwork:{numericId}` (integer); `artworks:index` (Set of stringified IDs); `artworks:slugs` (Hash: slug → numericId); `artworks:counter` (auto-increment integer). `Artwork.id` is a number; `Artwork.slug` is the URL-friendly string used in public routes.
-- Prod uses `REDIS_KEY_PREFIX=prod:` and `BLOB_PATH_PREFIX=prod/`; dev uses `dev:` / `dev/`. Both isolate from each other on the shared Vercel Redis + Blob instance.
+- Artwork keys: `artwork:{numericId}`; `artworks:index` (Set); `artworks:slugs` (Hash: slug→id); `artworks:counter`.
+- `restoreRedis()` throws if backup prefix ≠ current tenant prefix (cross-tenant guard).
 
-Seed data lives in `src/data/seed.ts`. To reset local dev: `rm .data/store.json && npm run dev`.
+**`store.file.ts`** (local dev):
+- `getDataFile()` reads tenant ID from headers, returns `.data/{tenantId}/store.json`; falls back to `.data/store.json`.
+- Per-tenant write chains via `writeChains: Map<string, Promise<void>>`.
+
+Seed data lives in `src/data/seed.ts`. To reset local dev: `rm -rf .data && npm run dev`.
 
 ### Pages
 
 **Public (route group `(public)`):**
-- `/` — curatorial rooms view: live works grouped by visible primary-room tags, sorted by `orderByTag[tag.id]`. Filter pills are anchor links to `#room-{id}` sections. First image gets `priority` for LCP.
-- `/artwork/[slug]` — orientation-aware layout (portrait: 2-col, landscape: stacked); lightbox; reference image is a draggable/resizable floating overlay; prev/next nav is scoped to the artwork's primary room with a center index link.
+- `/` — curatorial rooms view: live works grouped by visible primary-room tags, sorted by `orderByTag[tag.id]`. Slideshow button opens full-screen fade viewer.
+- `/artwork/[slug]` — orientation-aware layout; lightbox; reference image draggable overlay; prev/next nav scoped to primary room.
 - `/about` — bio + contact email read from store, edited at `/admin/about`.
-- `not-found.tsx` — "Plate · 404" page (no own `<Nav />`; layout supplies it).
+- `not-found.tsx` — "Plate · 404" page.
 
 **Admin (`/admin/*`):**
-- `/admin` — dashboard: search, tag/status filters, drag-to-reorder, soft-delete to trash, restore, purge. Table cells use `min-w-0` for grid truncation; outer wrapper uses `overflow-x-auto`.
+- `/admin` — dashboard: search, tag/status filters, drag-to-reorder, soft-delete, restore, purge.
 - `/admin/works/new` and `/admin/works/[id]` — create/edit form with live preview, image + reference-image upload.
 - `/admin/tags` — tag CRUD + per-tag artwork ordering.
 - `/admin/about` — bio textarea + contact email.
 - `/admin/audit` — audit log viewer, filterable by action and actor email.
-- `/admin/sign-in` — argon2id password auth, opaque session tokens, in-memory rate limiter. Header nav is hidden until signed in.
+- `/admin/backup` — Backup now / Restore / Delete UI; lists Blob backups newest-first.
+- `/admin/sign-in` — argon2id password auth, opaque session tokens, in-memory rate limiter.
 
 ### Auth
 
@@ -55,42 +90,40 @@ Session cookie (`gallery_session`) holds a 32-byte random hex token; stored *has
 `next/image` is used everywhere. Upload endpoint: `POST /api/admin/upload`.
 
 Every upload is processed through `sharp`: resized to ≤2000px on the longest edge, converted to WebP (quality 85, metadata stripped). The original is preserved verbatim.
-- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/artists/{ARTIST_BLOB_ID}/{dir}/{uuid}.webp`; original → `public/artists/{ARTIST_BLOB_ID}/{dir}/original/{uuid}.{ext}`.
-- **Production / dev with Blob**: WebP → Blob at `{BLOB_PATH_PREFIX}artists/{ARTIST_BLOB_ID}/{dir}/{uuid}.webp`; original → `{BLOB_PATH_PREFIX}artists/{ARTIST_BLOB_ID}/{dir}/original/{uuid}.{ext}`. Full Blob URLs stored on the artwork record.
-- **`ARTIST_BLOB_ID`** is a fixed UUID in `src/lib/config.ts` used exclusively in blob paths (opaque, not the numeric `ARTIST_ID`).
-- **`Artwork.blobId`** is a stable UUID assigned at creation and used as the artwork's blob directory name. `ArtworkForm` generates a `pendingId` UUID client-side; this becomes the permanent `blobId` on first save.
-- **Artwork images** use `dir=artworks/{blobId}/images`; **reference images** use `dir=artworks/{blobId}/references`. Reference upload requires a saved artwork (guard: `!form.blobId`).
-- **`Artwork.imageFilename`** and **`ArtworkReference.imageFilename`** store the original upload filename as metadata in Redis (never exposed to visitors).
+- `artistDir` and `blobPrefix` are read from tenant headers (not env vars or config constants).
+- **Local dev** (no `BLOB_READ_WRITE_TOKEN`): WebP → `public/artists/{tenant.blobId}/{dir}/{uuid}.webp`.
+- **Production**: WebP → Blob at `{tenant.blobPrefix}artists/{tenant.blobId}/{dir}/{uuid}.webp`. Full Blob URLs stored on the artwork record.
+- **`Artwork.blobId`** is a stable UUID assigned at creation and used as the artwork's blob directory name.
 - **Stale blobs** are deleted by `saveArtwork` when image URLs change on update; `purgeArtwork` deletes all artwork blobs.
 
-Response: `{ path, originalPath, originalFilename, width, height }` — dimensions come from sharp output.
-`Artwork.originalImage` stores the original URL alongside `Artwork.image`.
-`Artwork.imageFilename` and `ArtworkReference.imageFilename` store the original upload filename (metadata only, not exposed).
-
-`next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`. To add another external image host, extend that list.
+`next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`.
 
 ### Backup & Restore
 
-`GET /api/admin/backup` — dumps all Redis keys (excluding sessions) to Vercel Blob as `{BLOB_PATH_PREFIX}backup/redis-{datetime}Z.json`. Auth: valid session cookie OR `Authorization: Bearer {CRON_SECRET}`. Returns `{ ok, url, keys }`. `vercel.json` schedules it daily at 02:00 UTC. `CRON_SECRET` must be set manually in the Vercel dashboard (not auto-injected). After each backup, auto-purges to keep the newest 30 files.
+`GET /api/admin/backup` — dumps all Redis keys (excluding sessions) to Vercel Blob as `{tenant.blobPrefix}backup/redis-{datetime}Z.json`. Auth: valid session cookie OR `Authorization: Bearer {CRON_SECRET}`. Auto-purges to keep newest 30 per tenant. `vercel.json` schedules it daily at 02:00 UTC.
 
-`POST /api/admin/restore` — session-auth only (no CRON_SECRET). Body: `{ url: string }` (Blob URL of backup JSON). Validates shape, calls `restoreRedis()`, logs `backup.restore` audit entry. Returns `{ ok, keys }`.
-
-`restoreRedis()` in `store.kv.ts`: scans + deletes all non-session keys, then writes each entry back by Redis type (`rpush` for lists to preserve lrange order; `hmset` for hashes). Sessions survive restore unchanged.
-
-Admin UI at `/admin/backup`: lists backups newest-first; Backup now / Restore (with confirm) / Delete buttons. Linked from admin nav.
+`POST /api/admin/restore` — session-auth only. Body: `{ url: string }`. Validates backup prefix matches current tenant (throws otherwise). Logs `backup.restore` audit entry.
 
 ### Tests
 
-Vitest test suite lives in `src/test/`. Run with `npm test`. GitHub Actions CI (`.github/workflows/ci.yml`) runs tests + build on every push/PR to main. Mock pattern: declare `const mockXxx = vi.fn()` at module top level before `vi.mock(factory)` — the factory closure captures them lazily and they are initialized by the time it runs.
+Vitest test suite lives in `src/test/`. Run with `npm test`. GitHub Actions CI runs tests + build on every push/PR to main.
+
+**Mock pattern:** declare `const mockXxx = vi.fn()` at module top level before `vi.mock(factory)` — the factory closure captures them lazily.
+
+**`next/headers` mock** — globally set in `src/test/setup.ts`. `headers` default returns `{ get: () => null }` which causes all store calls to fall back to env-var prefix. Tests that need tenant-specific behavior override it per-test.
 
 ### Environment isolation
 
-When the same Redis + Blob is shared between local dev and production, set both prefixes locally to keep them separate:
+Local dev `.env.local`:
 ```
 REDIS_KEY_PREFIX=dev:
 BLOB_PATH_PREFIX=dev/
 ```
-Production uses `REDIS_KEY_PREFIX=prod:` and `BLOB_PATH_PREFIX=prod/` (set in Vercel env vars).
+Or with `GALLERY_TENANTS`:
+```
+GALLERY_TENANTS=[{"id":"roamingbrush","hostnames":["localhost","roamingbrush.localhost"],...}]
+```
+Production: set `GALLERY_TENANTS` in Vercel env vars; remove `REDIS_KEY_PREFIX`, `BLOB_PATH_PREFIX`, `ARTIST_BLOB_ID`.
 
 ### Admin dark mode
 
