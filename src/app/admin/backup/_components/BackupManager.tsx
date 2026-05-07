@@ -19,7 +19,7 @@ function formatBytes(bytes: number): string {
 }
 
 function backupDate(pathname: string): string {
-  const m = pathname.match(/redis-(\d{4}-\d{2}-\d{2})\.json$/);
+  const m = pathname.match(/redis-(.+?)\.json$/);
   return m ? m[1] : pathname.split("/").pop() ?? pathname;
 }
 

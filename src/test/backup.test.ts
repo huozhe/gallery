@@ -130,7 +130,7 @@ describe("GET /api/admin/backup", () => {
     process.env.BLOB_PATH_PREFIX = "prod/";
     await GET(makeRequest({ authorization: "Bearer secret" }));
     expect(mockPut).toHaveBeenCalledWith(
-      expect.stringMatching(/^prod\/backup\/redis-\d{4}-\d{2}-\d{2}\.json$/),
+      expect.stringMatching(/^prod\/backup\/redis-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.json$/),
       expect.any(String),
       expect.objectContaining({ contentType: "application/json" }),
     );

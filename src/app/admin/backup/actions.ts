@@ -16,7 +16,7 @@ export async function triggerBackup(): Promise<{ ok: boolean; url: string | null
   const backup = await backupRedis();
   const keyCount = Object.keys(backup.data).length;
   const body = JSON.stringify(backup, null, 2);
-  const date = new Date().toISOString().slice(0, 10);
+  const date = new Date().toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
   const prefix = process.env.BLOB_PATH_PREFIX ?? "";
   const pathname = `${prefix}backup/redis-${date}.json`;
 
