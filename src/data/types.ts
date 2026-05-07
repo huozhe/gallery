@@ -82,7 +82,8 @@ export type AuditAction =
   | "user.delete"
   | "auth.sign-in"
   | "auth.sign-out"
-  | "auth.failed";
+  | "auth.failed"
+  | "backup.restore";
 
 export type AuditEntry = {
   id: string;

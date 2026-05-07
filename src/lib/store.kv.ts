@@ -41,9 +41,11 @@ class PrefixedRedis {
   lrange(key: string, start: number, stop: number)        { return this.r.lrange(this.k(key), start, stop); }
   incr(key: string)                                       { return this.r.incr(this.k(key)); }
   hset(key: string, field: string, value: string)         { return this.r.hset(this.k(key), field, value); }
+  hmset(key: string, fields: Record<string, string>)      { return this.r.hset(this.k(key), fields); }
   hget(key: string, field: string)                        { return this.r.hget(this.k(key), field); }
   hdel(key: string, field: string)                        { return this.r.hdel(this.k(key), field); }
   hgetall(key: string)                                    { return this.r.hgetall(this.k(key)); }
+  rpush(key: string, ...values: string[])                 { return this.r.rpush(this.k(key), ...values); }
   type(key: string)                                       { return this.r.type(this.k(key)); }
 
   async scan(pattern: string): Promise<string[]> {
@@ -467,4 +469,37 @@ export async function backupRedis(): Promise<BackupData> {
     if (entry) data[key] = entry;
   }
   return { timestamp: new Date().toISOString(), prefix: PREFIX, data };
+}
+
+export async function restoreRedis(data: BackupData): Promise<{ keys: number }> {
+  const r = getClient();
+
+  // delete all non-session keys under the current prefix
+  const existing = await r.scan("*");
+  for (const key of existing) {
+    if (!key.startsWith("session:")) await r.del(key);
+  }
+
+  // write all keys from backup (sessions excluded at backup time, but guard anyway)
+  let count = 0;
+  for (const [key, entry] of Object.entries(data.data)) {
+    if (key.startsWith("session:")) continue;
+    switch (entry.type) {
+      case "string":
+        await r.set(key, entry.value);
+        break;
+      case "set":
+        if (entry.value.length > 0) await r.sadd(key, ...entry.value);
+        break;
+      case "hash":
+        if (Object.keys(entry.value).length > 0) await r.hmset(key, entry.value);
+        break;
+      case "list":
+        if (entry.value.length > 0) await r.rpush(key, ...entry.value);
+        break;
+    }
+    count++;
+  }
+
+  return { keys: count };
 }
