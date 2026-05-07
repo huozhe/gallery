@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
-npm test         # Vitest (82 tests); npx vitest run --coverage for coverage report
+npm test         # Vitest (89 tests); npx vitest run --coverage for coverage report
 npm run migrate:images  # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
 ```
 
@@ -69,9 +69,15 @@ Response: `{ path, originalPath, originalFilename, width, height }` — dimensio
 
 `next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`. To add another external image host, extend that list.
 
-### Backup
+### Backup & Restore
 
-`GET /api/admin/backup` — dumps all Redis keys (excluding sessions) to Vercel Blob as `{BLOB_PATH_PREFIX}backup/redis-YYYY-MM-DD.json`. Auth: valid session cookie OR `Authorization: Bearer {CRON_SECRET}`. Returns `{ ok, url, keys }`. `vercel.json` schedules it daily at 02:00 UTC. `CRON_SECRET` must be set manually in the Vercel dashboard (not auto-injected).
+`GET /api/admin/backup` — dumps all Redis keys (excluding sessions) to Vercel Blob as `{BLOB_PATH_PREFIX}backup/redis-{datetime}Z.json`. Auth: valid session cookie OR `Authorization: Bearer {CRON_SECRET}`. Returns `{ ok, url, keys }`. `vercel.json` schedules it daily at 02:00 UTC. `CRON_SECRET` must be set manually in the Vercel dashboard (not auto-injected). After each backup, auto-purges to keep the newest 30 files.
+
+`POST /api/admin/restore` — session-auth only (no CRON_SECRET). Body: `{ url: string }` (Blob URL of backup JSON). Validates shape, calls `restoreRedis()`, logs `backup.restore` audit entry. Returns `{ ok, keys }`.
+
+`restoreRedis()` in `store.kv.ts`: scans + deletes all non-session keys, then writes each entry back by Redis type (`rpush` for lists to preserve lrange order; `hmset` for hashes). Sessions survive restore unchanged.
+
+Admin UI at `/admin/backup`: lists backups newest-first; Backup now / Restore (with confirm) / Delete buttons. Linked from admin nav.
 
 ### Tests
 
