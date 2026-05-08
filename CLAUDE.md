@@ -9,6 +9,7 @@ npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
 npm test         # Vitest (112 tests); npx vitest run --coverage for coverage report
+# /sitemap.xml and /robots.txt are dynamic server routes (src/app/sitemap.ts, robots.ts)
 npm run migrate:images  # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
 ```
 
@@ -74,8 +75,10 @@ Seed data lives in `src/data/seed.ts`. To reset local dev: `rm -rf .data && npm 
 
 **Public (route group `(public)`):**
 - `/` — curatorial rooms view: live works grouped by visible primary-room tags, sorted by `orderByTag[tag.id]`. Slideshow button opens full-screen fade viewer.
-- `/artwork/[slug]` — orientation-aware layout; lightbox; reference image draggable overlay; prev/next nav scoped to primary room.
-- `/about` — bio + contact email read from store, edited at `/admin/about`.
+- `/artwork/[slug]` — orientation-aware layout; lightbox; reference image draggable overlay; prev/next nav scoped to primary room. Full OG + `twitter:card summary_large_image` metadata.
+- `/about` — bio read from store; contact form (sends to `about.email` via Resend); artist email not displayed publicly.
+- `/sitemap.xml` — dynamic; lists homepage, about, all live artwork URLs with `lastModified`.
+- `/robots.txt` — allows public pages, blocks `/admin/`, references sitemap.
 - `not-found.tsx` — "Plate · 404" page.
 
 **Admin (`/admin/*`):**
@@ -94,7 +97,9 @@ Seed data lives in `src/data/seed.ts`. To reset local dev: `rm -rf .data && npm 
 
 Session cookie (`gallery_session`) holds a 32-byte random hex token; stored *hashed* in the store. `src/lib/auth.ts` handles hashing, verification, session lookup. `requireSession()` redirects to sign-in if unauthenticated. **Note:** the rate limiter is in-memory — fine for a single warm Vercel instance but resets per cold start.
 
-Password reset tokens use the same `createSessionToken()`/`hashSessionToken()` primitives. Raw token goes in the email URL; SHA256 hash stored under `pwreset:{hash}` with 1hr TTL. `src/lib/email.ts` wraps Resend; falls back to `console.log` when `RESEND_API_KEY` is unset (local dev). Required env vars: `RESEND_API_KEY`, `RESET_FROM_EMAIL`.
+Password reset tokens use the same `createSessionToken()`/`hashSessionToken()` primitives. Raw token goes in the email URL; SHA256 hash stored under `pwreset:{hash}` with 1hr TTL. `src/lib/email.ts` wraps Resend; exports `sendPasswordResetEmail()` and `sendContactEmail()`; falls back to `console.log` when `RESEND_API_KEY` is unset (local dev). Required env vars: `RESEND_API_KEY`, `RESET_FROM_EMAIL`.
+
+All public pages have `generateMetadata()` for OG/Twitter card support. Base URL derived from `host` request header (multi-tenant compatible). `metadataBase` in root layout set from `VERCEL_URL` env var as fallback.
 
 ### Images
 
