@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
-npm test         # Vitest (97 tests); npx vitest run --coverage for coverage report
+npm test         # Vitest (106 tests); npx vitest run --coverage for coverage report
 npm run migrate:images  # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
 ```
 
@@ -20,7 +20,7 @@ Next.js 16 App Router, TypeScript, Tailwind CSS. Deployed on Vercel. Data and up
 
 The app supports multiple artists via host-header routing. Each artist gets their own subdomain/domain with isolated Redis data and Vercel Blob storage.
 
-**`src/lib/tenant.ts`** — `Tenant` type + `GALLERY_TENANTS` env-var registry (JSON array). Parsed once at module load (edge-compatible). `resolveTenant(host)` used by the proxy; `getTenantFromHeaders(h)` used by route handlers and server actions. Falls back to legacy `REDIS_KEY_PREFIX` / `BLOB_PATH_PREFIX` / `ARTIST_BLOB_ID` env vars when `GALLERY_TENANTS` is unset.
+**`src/lib/tenant.ts`** — `Tenant` type + `GALLERY_TENANTS` env-var registry (JSON array). Parsed once at module load (edge-compatible). `resolveTenant(host)` used by the proxy; `getTenantFromHeaders(h)` used by route handlers and server actions; `getTenantByPrefix(prefix)` used by `ensureSeeded()` to resolve per-tenant credentials without headers. Falls back to legacy `REDIS_KEY_PREFIX` / `BLOB_PATH_PREFIX` / `ARTIST_BLOB_ID` env vars when `GALLERY_TENANTS` is unset.
 
 **`src/proxy.ts`** — Next.js 16 proxy (file must be `proxy.ts`, export must be `proxy`). Reads `Host` header, resolves tenant, stamps five `x-tenant-*` headers on the **request** object via `NextResponse.next({ request: { headers } })` so they are readable via `await headers()` in server components. Also handles `/admin` cookie-presence guard.
 
@@ -39,10 +39,13 @@ The app supports multiple artists via host-header routing. Each artist gets thei
     "name": "Roaming Brush",
     "redisPrefix": "prod:roamingbrush:",
     "blobPrefix": "prod/roamingbrush/",
-    "blobId": "00000000-0000-0000-0000-0000000000ff"
+    "blobId": "00000000-0000-0000-0000-0000000000ff",
+    "adminEmail": "artist@example.com",
+    "adminPassword": "initial-password"
   }
 ]
 ```
+`adminEmail`/`adminPassword` are optional — used only to seed the first admin user on first request when `users:index` is empty. Fall back to global `GALLERY_ADMIN_EMAIL`/`GALLERY_ADMIN_PASSWORD` env vars if absent. Change password via `/admin/users` after first login; `adminPassword` can then be removed from the config.
 
 ### Storage
 
@@ -54,7 +57,7 @@ The app supports multiple artists via host-header routing. Each artist gets thei
 - `getRawConnection()` parses `REDIS_URL` with `new URL()` and passes structured options to ioredis — avoids ioredis's internal `url.parse()` deprecation warning (DEP0169).
 - `getClient()` is async: reads `x-tenant-redis-prefix` from `await headers()`, falls back to `REDIS_KEY_PREFIX` env var (for scripts/tests outside request context).
 - `PrefixedRedis` takes `prefix` as constructor arg and exposes `readonly prefix`. Every key is automatically prefixed — call sites cannot bypass it.
-- `ensureSeeded()` is keyed by prefix (`seeded: Set<string>`); each tenant seeds independently on first request.
+- `ensureSeeded()` is keyed by prefix (`seeded: Set<string>`); each tenant seeds independently on first request. Uses per-tenant `adminEmail`/`adminPassword` from `GALLERY_TENANTS` (via `getTenantByPrefix()`), falling back to global env vars.
 - Sessions use Redis TTL via `setex`.
 - Artwork keys: `artwork:{numericId}`; `artworks:index` (Set); `artworks:slugs` (Hash: slug→id); `artworks:counter`.
 - `restoreRedis()` throws if backup prefix ≠ current tenant prefix (cross-tenant guard).
@@ -62,6 +65,8 @@ The app supports multiple artists via host-header routing. Each artist gets thei
 **`store.file.ts`** (local dev):
 - `getDataFile()` reads tenant ID from headers, returns `.data/{tenantId}/store.json`; falls back to `.data/store.json`.
 - Per-tenant write chains via `writeChains: Map<string, Promise<void>>`.
+- `load()` seeds artworks, tags, and admin user (from `GALLERY_ADMIN_EMAIL`/`GALLERY_ADMIN_PASSWORD`) on first run.
+- `users.*` calls `load()` (not `readFile()`) so user seeding triggers on first sign-in attempt.
 
 Seed data lives in `src/data/seed.ts`. To reset local dev: `rm -rf .data && npm run dev`.
 
@@ -80,6 +85,7 @@ Seed data lives in `src/data/seed.ts`. To reset local dev: `rm -rf .data && npm 
 - `/admin/about` — bio textarea + contact email.
 - `/admin/audit` — audit log viewer, filterable by action and actor email.
 - `/admin/backup` — Backup now / Restore / Delete UI; lists Blob backups newest-first.
+- `/admin/users` — change own password; add admin users; delete users (guards: no self-delete, no last-user delete).
 - `/admin/sign-in` — argon2id password auth, opaque session tokens, in-memory rate limiter.
 
 ### Auth
