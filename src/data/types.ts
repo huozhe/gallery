@@ -80,6 +80,7 @@ export type AuditAction =
   | "about.update"
   | "user.create"
   | "user.delete"
+  | "user.password-change"
   | "auth.sign-in"
   | "auth.sign-out"
   | "auth.failed"

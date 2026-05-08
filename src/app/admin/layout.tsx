@@ -25,6 +25,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/backup" className="text-sm text-neutral-600 hover:text-neutral-900">
               Backup
             </Link>
+            <Link href="/admin/users" className="text-sm text-neutral-600 hover:text-neutral-900">
+              Users
+            </Link>
             <Link href="/" className="text-sm text-neutral-600 hover:text-neutral-900">
               View site ↗
             </Link>

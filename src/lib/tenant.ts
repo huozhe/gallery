@@ -8,6 +8,8 @@ export type Tenant = {
   redisPrefix: string; // e.g. "prod:roamingbrush:"
   blobPrefix: string;  // e.g. "prod/roamingbrush/"
   blobId: string;      // UUID for blob path (was ARTIST_BLOB_ID)
+  adminEmail?: string; // seed credential for first-time setup (optional)
+  adminPassword?: string;
 };
 
 function loadTenants(): Tenant[] | null {
@@ -50,6 +52,15 @@ export function resolveTenant(hostHeader: string | null): Tenant | null {
   const host = (hostHeader ?? "").split(":")[0].toLowerCase();
   if (!TENANTS) return singleTenantFallback();
   return HOSTNAME_MAP.get(host) ?? null;
+}
+
+/**
+ * Find a tenant by its Redis prefix. Used by ensureSeeded() to resolve
+ * per-tenant admin credentials without needing request headers.
+ */
+export function getTenantByPrefix(prefix: string): Tenant | null {
+  if (!TENANTS) return null;
+  return TENANTS.find((t) => t.redisPrefix === prefix) ?? null;
 }
 
 /**

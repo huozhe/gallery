@@ -16,7 +16,7 @@ import type {
 } from "@/data/types";
 import { seedAbout, seedArtworks, seedTags } from "@/data/seed";
 import { SESSION_TTL_SECONDS } from "@/lib/session-config";
-import { getTenantFromHeaders } from "@/lib/tenant";
+import { getTenantByPrefix, getTenantFromHeaders } from "@/lib/tenant";
 
 const AUDIT_CAP = 5000;
 
@@ -158,23 +158,24 @@ async function ensureSeeded(): Promise<void> {
     await set("about:content", seedAbout);
   }
 
-  // Admin user seeding is independent — runs even if artworks were already seeded
+  // Admin user seeding — per-tenant credentials take precedence over global env vars
   const userCount = await r.scard("users:index");
-  if (
-    userCount === 0 &&
-    process.env.GALLERY_ADMIN_EMAIL &&
-    process.env.GALLERY_ADMIN_PASSWORD
-  ) {
-    const { hashPassword } = await import("@/lib/auth");
-    const passwordHash = await hashPassword(process.env.GALLERY_ADMIN_PASSWORD);
-    const user: User = {
-      id: ulid(),
-      email: process.env.GALLERY_ADMIN_EMAIL.toLowerCase(),
-      passwordHash,
-      createdAt: new Date().toISOString(),
-    };
-    await set(`user:${user.email}`, user);
-    await r.sadd("users:index", user.email);
+  if (userCount === 0) {
+    const tenant = getTenantByPrefix(r.prefix);
+    const adminEmail = tenant?.adminEmail ?? process.env.GALLERY_ADMIN_EMAIL;
+    const adminPassword = tenant?.adminPassword ?? process.env.GALLERY_ADMIN_PASSWORD;
+    if (adminEmail && adminPassword) {
+      const { hashPassword } = await import("@/lib/auth");
+      const passwordHash = await hashPassword(adminPassword);
+      const user: User = {
+        id: ulid(),
+        email: adminEmail.toLowerCase(),
+        passwordHash,
+        createdAt: new Date().toISOString(),
+      };
+      await set(`user:${user.email}`, user);
+      await r.sadd("users:index", user.email);
+    }
   }
   seeded.add(r.prefix);
 }

@@ -20,6 +20,8 @@ const mockTagsDelete = vi.fn();
 const mockUsersGetByEmail = vi.fn();
 const mockUsersGetById = vi.fn();
 const mockUsersUpsert = vi.fn();
+const mockUsersList = vi.fn();
+const mockUsersDelete = vi.fn();
 const mockAuditLog = vi.fn();
 const mockAboutGet = vi.fn();
 const mockAboutSet = vi.fn();
@@ -48,6 +50,8 @@ vi.mock("@/lib/store", () => ({
     getByEmail: mockUsersGetByEmail,
     getById: mockUsersGetById,
     upsert: mockUsersUpsert,
+    list: mockUsersList,
+    delete: mockUsersDelete,
   },
   sessions: {
     get: mockSessionsGet,
@@ -79,7 +83,7 @@ vi.mock("@/lib/auth", () => ({
   })),
 }));
 
-const { signIn, signOut, saveArtwork, createTag, updateTag, deleteTag, softDeleteArtwork, restoreArtwork, purgeArtwork, reorderArtworks, reorderArtworksByTag, updateAbout } = await import("@/app/admin/actions");
+const { signIn, signOut, saveArtwork, createTag, updateTag, deleteTag, softDeleteArtwork, restoreArtwork, purgeArtwork, reorderArtworks, reorderArtworksByTag, updateAbout, changePassword, createAdminUser, deleteAdminUser } = await import("@/app/admin/actions");
 
 let cookieJar: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
 
@@ -386,5 +390,86 @@ describe("signOut", () => {
     await expect(signOut()).rejects.toThrow("REDIRECT:/admin/sign-in");
     expect(mockSessionsDelete).not.toHaveBeenCalled();
     expect(cookieJar.delete).toHaveBeenCalledWith("gallery_session");
+  });
+});
+
+describe("user management", () => {
+  const currentUser = { id: "u1", email: "admin@test.com", passwordHash: "hash", createdAt: "2024-01-01T00:00:00Z" };
+
+  describe("changePassword", () => {
+    it("returns error when current password is wrong", async () => {
+      mockVerifyPassword.mockResolvedValue(false);
+      const result = await changePassword({ currentPassword: "wrong", newPassword: "newpassword1" });
+      expect(result).toEqual({ success: false, error: "Current password is incorrect." });
+      expect(mockUsersUpsert).not.toHaveBeenCalled();
+    });
+
+    it("changes password and logs audit on success", async () => {
+      mockVerifyPassword.mockResolvedValue(true);
+      mockHashPassword.mockResolvedValue("newhash");
+      mockUsersUpsert.mockResolvedValue({ ...currentUser, passwordHash: "newhash" });
+      const result = await changePassword({ currentPassword: "correct", newPassword: "newpassword1" });
+      expect(result).toEqual({ success: true });
+      expect(mockUsersUpsert).toHaveBeenCalledWith(expect.objectContaining({ passwordHash: "newhash" }));
+      expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "user.password-change" }));
+    });
+
+    it("returns error when new password is too short", async () => {
+      const result = await changePassword({ currentPassword: "correct", newPassword: "short" });
+      expect(result).toEqual({ success: false, error: expect.stringContaining("8") });
+      expect(mockUsersUpsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("createAdminUser", () => {
+    it("returns error when email already exists", async () => {
+      mockUsersGetByEmail.mockResolvedValue({ id: "u2", email: "other@test.com", passwordHash: "h", createdAt: "" });
+      const result = await createAdminUser({ email: "other@test.com", password: "password123" });
+      expect(result).toEqual({ success: false, error: expect.stringContaining("already exists") });
+      expect(mockUsersUpsert).not.toHaveBeenCalled();
+    });
+
+    it("creates user and logs audit on success", async () => {
+      mockUsersGetByEmail.mockResolvedValue(null);
+      mockHashPassword.mockResolvedValue("hashed");
+      mockUsersUpsert.mockResolvedValue({});
+      const result = await createAdminUser({ email: "New@Test.com", password: "password123" });
+      expect(result).toEqual({ success: true });
+      expect(mockUsersUpsert).toHaveBeenCalledWith(expect.objectContaining({ email: "new@test.com" }));
+      expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "user.create" }));
+    });
+
+    it("returns error when password is too short", async () => {
+      const result = await createAdminUser({ email: "x@y.com", password: "short" });
+      expect(result).toEqual({ success: false, error: expect.stringContaining("8") });
+    });
+  });
+
+  describe("deleteAdminUser", () => {
+    it("returns error when deleting yourself", async () => {
+      mockUsersList.mockResolvedValue([currentUser, { id: "u2", email: "other@test.com", passwordHash: "", createdAt: "" }]);
+      const result = await deleteAdminUser({ email: "admin@test.com" });
+      expect(result).toEqual({ success: false, error: expect.stringContaining("your own") });
+      expect(mockUsersDelete).not.toHaveBeenCalled();
+    });
+
+    it("returns error when deleting the last user", async () => {
+      mockUsersList.mockResolvedValue([currentUser]);
+      const result = await deleteAdminUser({ email: "other@test.com" });
+      expect(result).toEqual({ success: false, error: expect.stringContaining("last admin") });
+      expect(mockUsersDelete).not.toHaveBeenCalled();
+    });
+
+    it("deletes user and logs audit on success", async () => {
+      mockUsersList.mockResolvedValue([
+        currentUser,
+        { id: "u2", email: "other@test.com", passwordHash: "", createdAt: "" },
+      ]);
+      mockUsersDelete.mockResolvedValue(undefined);
+      const result = await deleteAdminUser({ email: "other@test.com" });
+      expect(result).toEqual({ success: true });
+      expect(mockUsersDelete).toHaveBeenCalledWith("other@test.com");
+      expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "user.delete" }));
+    });
   });
 });

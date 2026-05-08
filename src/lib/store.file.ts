@@ -86,21 +86,33 @@ async function update<T>(mutator: (data: StoreData) => T | Promise<T>): Promise<
   return result;
 }
 
-/** Read with auto-seed: if both artworks+tags are empty, seed first. */
+/** Read with auto-seed: seeds artworks/tags and admin user on first run. */
 async function load(): Promise<StoreData> {
   const data = await readFile();
-  if (
-    Object.keys(data.artworks).length === 0 &&
-    Object.keys(data.tags).length === 0
-  ) {
-    return update((d) => {
+  const needsArtworkSeed =
+    Object.keys(data.artworks).length === 0 && Object.keys(data.tags).length === 0;
+  const needsUserSeed =
+    Object.keys(data.users).length === 0 &&
+    !!process.env.GALLERY_ADMIN_EMAIL &&
+    !!process.env.GALLERY_ADMIN_PASSWORD;
+
+  if (!needsArtworkSeed && !needsUserSeed) return data;
+
+  return update(async (d) => {
+    if (needsArtworkSeed) {
       for (const tag of seedTags) d.tags[tag.id] = tag;
       for (const art of seedArtworks) d.artworks[String(art.id)] = art;
       d.artworkCounter = seedArtworks.length;
-      return d;
-    });
-  }
-  return data;
+    }
+    if (needsUserSeed) {
+      const { hashPassword } = await import("@/lib/auth");
+      const { ulid } = await import("ulid");
+      const email = process.env.GALLERY_ADMIN_EMAIL!.toLowerCase();
+      const passwordHash = await hashPassword(process.env.GALLERY_ADMIN_PASSWORD!);
+      d.users[email] = { id: ulid(), email, passwordHash, createdAt: new Date().toISOString() };
+    }
+    return d;
+  });
 }
 
 /** Re-seed explicitly (used by `npm run migrate`). Idempotent. */
@@ -254,17 +266,17 @@ export const tags = {
 // ---------- users ----------
 export const users = {
   async list(): Promise<User[]> {
-    const data = await readFile();
+    const data = await load();
     return Object.values(data.users);
   },
 
   async getByEmail(email: string): Promise<User | null> {
-    const data = await readFile();
+    const data = await load();
     return data.users[email.toLowerCase()] ?? null;
   },
 
   async getById(id: string): Promise<User | null> {
-    const data = await readFile();
+    const data = await load();
     for (const u of Object.values(data.users)) if (u.id === id) return u;
     return null;
   },

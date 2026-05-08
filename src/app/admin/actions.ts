@@ -12,6 +12,7 @@ import {
   SESSION_TTL_SECONDS,
   checkRateLimit,
   createSessionToken,
+  hashPassword,
   hashSessionToken,
   recordAttempt,
   requireSession,
@@ -473,5 +474,68 @@ export async function updateAbout(input: unknown): Promise<UpdateAboutResult> {
   await logAudit("about.update", "about", { email: { from: null, to: d.email } });
   revalidatePath("/about");
   revalidatePath("/admin/about");
+  return { success: true };
+}
+
+// ---------- user management ----------
+
+const PasswordField = z.string().min(8, "Password must be at least 8 characters").max(128);
+
+const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password required"),
+  newPassword: PasswordField,
+});
+
+export type UserActionResult = { success: true } | { success: false; error: string };
+
+export async function changePassword(input: unknown): Promise<UserActionResult> {
+  const { user } = await requireSession();
+  const parsed = ChangePasswordSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validation error" };
+  const { currentPassword, newPassword } = parsed.data;
+  const ok = await verifyPassword(user.passwordHash, currentPassword);
+  if (!ok) return { success: false, error: "Current password is incorrect." };
+  const passwordHash = await hashPassword(newPassword);
+  await users.upsert({ ...user, passwordHash });
+  await logAudit("user.password-change", user.email);
+  revalidatePath("/admin/users");
+  return { success: true };
+}
+
+const CreateAdminUserSchema = z.object({
+  email: z.string().email("Invalid email").transform((s) => s.toLowerCase()),
+  password: PasswordField,
+});
+
+export async function createAdminUser(input: unknown): Promise<UserActionResult> {
+  await requireSession();
+  const parsed = CreateAdminUserSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validation error" };
+  const { email, password } = parsed.data;
+  const existing = await users.getByEmail(email);
+  if (existing) return { success: false, error: `User "${email}" already exists.` };
+  const passwordHash = await hashPassword(password);
+  const newUser = { id: ulid(), email, passwordHash, createdAt: new Date().toISOString() };
+  await users.upsert(newUser);
+  await logAudit("user.create", email, { email: { from: null, to: email } });
+  revalidatePath("/admin/users");
+  return { success: true };
+}
+
+const DeleteAdminUserSchema = z.object({
+  email: z.string().email(),
+});
+
+export async function deleteAdminUser(input: unknown): Promise<UserActionResult> {
+  const { user: currentUser } = await requireSession();
+  const parsed = DeleteAdminUserSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validation error" };
+  const { email } = parsed.data;
+  if (email === currentUser.email) return { success: false, error: "You cannot delete your own account." };
+  const all = await users.list();
+  if (all.length <= 1) return { success: false, error: "Cannot delete the last admin user." };
+  await users.delete(email);
+  await logAudit("user.delete", email, { email: { from: email, to: null } });
+  revalidatePath("/admin/users");
   return { success: true };
 }
