@@ -35,7 +35,7 @@ The app supports multiple artists via host-header routing. Each artist gets thei
 [
   {
     "id": "roamingbrush",
-    "hostnames": ["roamingbrush.com", "gallery-alpha-five.vercel.app"],
+    "hostnames": ["roamingbrush.art", "www.roamingbrush.art", "gallery-alpha-five.vercel.app"],
     "name": "Roaming Brush",
     "redisPrefix": "prod:roamingbrush:",
     "blobPrefix": "prod/roamingbrush/",
@@ -51,6 +51,7 @@ The app supports multiple artists via host-header routing. Each artist gets thei
 **`store.kv.ts` highlights (+ `backupRedis()` / `restoreRedis()` exports):**
 - Uses `ioredis` against the Vercel marketplace Redis (env var `REDIS_URL`).
 - Raw `ioredis` connection is a global singleton (`_redisRaw`). `PrefixedRedis` wrapper is created per-call.
+- `getRawConnection()` parses `REDIS_URL` with `new URL()` and passes structured options to ioredis — avoids ioredis's internal `url.parse()` deprecation warning (DEP0169).
 - `getClient()` is async: reads `x-tenant-redis-prefix` from `await headers()`, falls back to `REDIS_KEY_PREFIX` env var (for scripts/tests outside request context).
 - `PrefixedRedis` takes `prefix` as constructor arg and exposes `readonly prefix`. Every key is automatically prefixed — call sites cannot bypass it.
 - `ensureSeeded()` is keyed by prefix (`seeded: Set<string>`); each tenant seeds independently on first request.
