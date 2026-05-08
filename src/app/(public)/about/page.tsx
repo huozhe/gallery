@@ -26,11 +26,6 @@ export default async function About() {
       <div className="space-y-4 text-sm leading-relaxed text-neutral-700">
         {paragraphs.map((p, i) => <p key={i}>{p}</p>)}
       </div>
-      <div className="mt-8 text-sm text-neutral-500">
-        <a href={`mailto:${content.email}`} className="hover:text-neutral-900 transition-colors">
-          {content.email}
-        </a>
-      </div>
       <div className="mt-12 pt-8 border-t border-neutral-200">
         <h2 className="text-sm font-medium mb-6">Send a message</h2>
         <ContactForm />
