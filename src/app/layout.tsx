@@ -8,8 +8,16 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Gallery",
+  title: {
+    default: "Gallery",
+    template: "%s",
+  },
   description: "A portfolio of paintings and drawings.",
+  metadataBase: new URL(
+    process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000"
+  ),
 };
 
 export default function RootLayout({

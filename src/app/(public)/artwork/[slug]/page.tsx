@@ -1,7 +1,51 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { artworks, tags } from "@/lib/store";
 import type { Artwork } from "@/data/types";
+import { getTenantFromHeaders } from "@/lib/tenant";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const artwork = await artworks.getBySlug(slug);
+  if (!artwork || artwork.status !== "live") return {};
+
+  const h = await headers();
+  const tenant = getTenantFromHeaders(h);
+  const host = h.get("host") ?? "roamingbrush.art";
+  const proto = host.startsWith("localhost") ? "http" : "https";
+  const baseUrl = `${proto}://${host}`;
+
+  const description = artwork.description
+    ? artwork.description.split("\n")[0].slice(0, 160)
+    : `${artwork.title}, ${artwork.year}. ${artwork.medium}.`;
+
+  const imageUrl = artwork.image.startsWith("http")
+    ? artwork.image
+    : `${baseUrl}${artwork.image}`;
+
+  return {
+    title: `${artwork.title} — ${tenant.name}`,
+    description,
+    openGraph: {
+      title: artwork.title,
+      description,
+      type: "article",
+      images: [{ url: imageUrl, width: artwork.width, height: artwork.height, alt: artwork.title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: artwork.title,
+      description,
+      images: [imageUrl],
+    },
+  };
+}
 import ArtworkImage from "@/components/ArtworkImage";
 import ReferenceImage from "@/components/ReferenceImage";
 

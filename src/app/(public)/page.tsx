@@ -1,6 +1,21 @@
+import type { Metadata } from "next";
+import { headers } from "next/headers";
 import GalleryGrid from "@/components/GalleryGrid";
 import SlideshowButton from "@/components/SlideshowButton";
-import { artworks, tags } from "@/lib/store";
+import { about, artworks, tags } from "@/lib/store";
+import { getTenantFromHeaders } from "@/lib/tenant";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const h = await headers();
+  const tenant = getTenantFromHeaders(h);
+  const content = await about.get();
+  const description = content.bio.split(/\n\n+/)[0]?.slice(0, 160) ?? "";
+  return {
+    title: tenant.name,
+    description,
+    openGraph: { title: tenant.name, description, type: "website" },
+  };
+}
 
 function toRoman(n: number): string {
   const map: [number, string][] = [
