@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
-npm test         # Vitest (106 tests); npx vitest run --coverage for coverage report
+npm test         # Vitest (112 tests); npx vitest run --coverage for coverage report
 npm run migrate:images  # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
 ```
 
@@ -22,7 +22,7 @@ The app supports multiple artists via host-header routing. Each artist gets thei
 
 **`src/lib/tenant.ts`** — `Tenant` type + `GALLERY_TENANTS` env-var registry (JSON array). Parsed once at module load (edge-compatible). `resolveTenant(host)` used by the proxy; `getTenantFromHeaders(h)` used by route handlers and server actions; `getTenantByPrefix(prefix)` used by `ensureSeeded()` to resolve per-tenant credentials without headers. Falls back to legacy `REDIS_KEY_PREFIX` / `BLOB_PATH_PREFIX` / `ARTIST_BLOB_ID` env vars when `GALLERY_TENANTS` is unset.
 
-**`src/proxy.ts`** — Next.js 16 proxy (file must be `proxy.ts`, export must be `proxy`). Reads `Host` header, resolves tenant, stamps five `x-tenant-*` headers on the **request** object via `NextResponse.next({ request: { headers } })` so they are readable via `await headers()` in server components. Also handles `/admin` cookie-presence guard.
+**`src/proxy.ts`** — Next.js 16 proxy (file must be `proxy.ts`, export must be `proxy`). Reads `Host` header, resolves tenant, stamps five `x-tenant-*` headers on the **request** object via `NextResponse.next({ request: { headers } })` so they are readable via `await headers()` in server components. Also handles `/admin` cookie-presence guard — `/admin/sign-in`, `/admin/forgot-password`, and `/admin/reset-password` are public (no cookie required).
 
 **Tenant headers** (server-side only, never sent to browser):
 - `x-tenant-id`, `x-tenant-name`
@@ -86,11 +86,15 @@ Seed data lives in `src/data/seed.ts`. To reset local dev: `rm -rf .data && npm 
 - `/admin/audit` — audit log viewer, filterable by action and actor email.
 - `/admin/backup` — Backup now / Restore / Delete UI; lists Blob backups newest-first.
 - `/admin/users` — change own password; add admin users; delete users (guards: no self-delete, no last-user delete).
+- `/admin/forgot-password` — request password reset link; always shows generic confirmation (no email-existence leak).
+- `/admin/reset-password` — server validates 1hr token; renders new-password form or expired-link error.
 - `/admin/sign-in` — argon2id password auth, opaque session tokens, in-memory rate limiter.
 
 ### Auth
 
 Session cookie (`gallery_session`) holds a 32-byte random hex token; stored *hashed* in the store. `src/lib/auth.ts` handles hashing, verification, session lookup. `requireSession()` redirects to sign-in if unauthenticated. **Note:** the rate limiter is in-memory — fine for a single warm Vercel instance but resets per cold start.
+
+Password reset tokens use the same `createSessionToken()`/`hashSessionToken()` primitives. Raw token goes in the email URL; SHA256 hash stored under `pwreset:{hash}` with 1hr TTL. `src/lib/email.ts` wraps Resend; falls back to `console.log` when `RESEND_API_KEY` is unset (local dev). Required env vars: `RESEND_API_KEY`, `RESET_FROM_EMAIL`.
 
 ### Images
 
