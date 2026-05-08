@@ -72,7 +72,14 @@ function getRawConnection(): Redis {
     throw new Error("REDIS_URL is not set");
   }
   if (!globalThis._redisRaw) {
-    globalThis._redisRaw = new Redis(process.env.REDIS_URL, {
+    // Parse with WHATWG URL to avoid ioredis's internal url.parse() deprecation warning (DEP0169).
+    const u = new URL(process.env.REDIS_URL);
+    globalThis._redisRaw = new Redis({
+      host: u.hostname,
+      port: u.port ? parseInt(u.port, 10) : 6379,
+      username: u.username ? decodeURIComponent(u.username) : undefined,
+      password: u.password ? decodeURIComponent(u.password) : undefined,
+      tls: u.protocol === "rediss:" ? {} : undefined,
       maxRetriesPerRequest: 3,
       enableReadyCheck: false,
       lazyConnect: true,
