@@ -22,6 +22,10 @@ const mockUsersGetById = vi.fn();
 const mockUsersUpsert = vi.fn();
 const mockUsersList = vi.fn();
 const mockUsersDelete = vi.fn();
+const mockPasswordResetsSet = vi.fn();
+const mockPasswordResetsGet = vi.fn();
+const mockPasswordResetsDelete = vi.fn();
+const mockSendPasswordResetEmail = vi.fn();
 const mockAuditLog = vi.fn();
 const mockAboutGet = vi.fn();
 const mockAboutSet = vi.fn();
@@ -58,6 +62,11 @@ vi.mock("@/lib/store", () => ({
     upsert: mockSessionsUpsert,
     delete: mockSessionsDelete,
   },
+  passwordResets: {
+    set: mockPasswordResetsSet,
+    get: mockPasswordResetsGet,
+    delete: mockPasswordResetsDelete,
+  },
   audit: {
     log: mockAuditLog,
   },
@@ -65,6 +74,10 @@ vi.mock("@/lib/store", () => ({
     get: mockAboutGet,
     set: mockAboutSet,
   },
+}));
+
+vi.mock("@/lib/email", () => ({
+  sendPasswordResetEmail: mockSendPasswordResetEmail,
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -83,7 +96,7 @@ vi.mock("@/lib/auth", () => ({
   })),
 }));
 
-const { signIn, signOut, saveArtwork, createTag, updateTag, deleteTag, softDeleteArtwork, restoreArtwork, purgeArtwork, reorderArtworks, reorderArtworksByTag, updateAbout, changePassword, createAdminUser, deleteAdminUser } = await import("@/app/admin/actions");
+const { signIn, signOut, saveArtwork, createTag, updateTag, deleteTag, softDeleteArtwork, restoreArtwork, purgeArtwork, reorderArtworks, reorderArtworksByTag, updateAbout, changePassword, createAdminUser, deleteAdminUser, requestPasswordReset, completePasswordReset } = await import("@/app/admin/actions");
 
 let cookieJar: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
 
@@ -470,6 +483,77 @@ describe("user management", () => {
       expect(result).toEqual({ success: true });
       expect(mockUsersDelete).toHaveBeenCalledWith("other@test.com");
       expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "user.delete" }));
+    });
+  });
+});
+
+describe("password reset", () => {
+  function makeFormData(fields: Record<string, string>): FormData {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+    return fd;
+  }
+
+  describe("requestPasswordReset", () => {
+    it("always redirects to sent page even when user not found", async () => {
+      mockUsersGetByEmail.mockResolvedValue(null);
+      await expect(requestPasswordReset(makeFormData({ email: "nobody@test.com" })))
+        .rejects.toThrow("REDIRECT:/admin/forgot-password?sent=1");
+      expect(mockPasswordResetsSet).not.toHaveBeenCalled();
+      expect(mockSendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+
+    it("stores token and sends email when user exists", async () => {
+      mockUsersGetByEmail.mockResolvedValue({ id: "u1", email: "admin@test.com", passwordHash: "h", createdAt: "" });
+      mockPasswordResetsSet.mockResolvedValue(undefined);
+      mockSendPasswordResetEmail.mockResolvedValue(undefined);
+      await expect(requestPasswordReset(makeFormData({ email: "admin@test.com" })))
+        .rejects.toThrow("REDIRECT:/admin/forgot-password?sent=1");
+      expect(mockPasswordResetsSet).toHaveBeenCalledWith(
+        expect.stringContaining("hashed:"),
+        "admin@test.com",
+        expect.any(String),
+      );
+      expect(mockSendPasswordResetEmail).toHaveBeenCalledWith(
+        "admin@test.com",
+        expect.stringContaining("/admin/reset-password?token="),
+      );
+      expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "user.password-reset-requested" }));
+    });
+
+    it("redirects to sent page when rate limited (no email sent)", async () => {
+      mockCheckRateLimit.mockReturnValueOnce(false);
+      await expect(requestPasswordReset(makeFormData({ email: "admin@test.com" })))
+        .rejects.toThrow("REDIRECT:/admin/forgot-password?sent=1");
+      expect(mockUsersGetByEmail).not.toHaveBeenCalled();
+      expect(mockSendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("completePasswordReset", () => {
+    it("redirects to error page when token not found", async () => {
+      mockPasswordResetsGet.mockResolvedValue(null);
+      await expect(completePasswordReset(makeFormData({ token: "rawtoken", newPassword: "newpassword1" })))
+        .rejects.toThrow(/REDIRECT:\/admin\/reset-password\?token=rawtoken&error=expired/);
+      expect(mockUsersUpsert).not.toHaveBeenCalled();
+    });
+
+    it("updates password and deletes token on success", async () => {
+      mockPasswordResetsGet.mockResolvedValue({ email: "admin@test.com", expiresAt: new Date(Date.now() + 3600000).toISOString() });
+      mockUsersGetByEmail.mockResolvedValue({ id: "u1", email: "admin@test.com", passwordHash: "old", createdAt: "" });
+      mockHashPassword.mockResolvedValue("newhash");
+      mockUsersUpsert.mockResolvedValue({});
+      mockPasswordResetsDelete.mockResolvedValue(undefined);
+      await expect(completePasswordReset(makeFormData({ token: "rawtoken", newPassword: "newpassword1" })))
+        .rejects.toThrow("REDIRECT:/admin/sign-in");
+      expect(mockUsersUpsert).toHaveBeenCalledWith(expect.objectContaining({ passwordHash: "newhash" }));
+      expect(mockPasswordResetsDelete).toHaveBeenCalledWith("hashed:rawtoken");
+      expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "user.password-reset-completed" }));
+    });
+
+    it("redirects to error when new password is too short", async () => {
+      await expect(completePasswordReset(makeFormData({ token: "rawtoken", newPassword: "short" })))
+        .rejects.toThrow("REDIRECT:/admin/reset-password?error=invalid");
     });
   });
 });

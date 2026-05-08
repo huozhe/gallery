@@ -411,6 +411,24 @@ export const sessions = {
   },
 };
 
+// ---------- password resets ----------
+
+const PASSWORD_RESET_TTL_SECONDS = 3600; // 1 hour
+
+export const passwordResets = {
+  async set(tokenHash: string, email: string, expiresAt: string): Promise<void> {
+    await set(`pwreset:${tokenHash}`, { email, expiresAt }, PASSWORD_RESET_TTL_SECONDS);
+  },
+
+  async get(tokenHash: string): Promise<{ email: string; expiresAt: string } | null> {
+    return get<{ email: string; expiresAt: string }>(`pwreset:${tokenHash}`);
+  },
+
+  async delete(tokenHash: string): Promise<void> {
+    await (await getClient()).del(`pwreset:${tokenHash}`);
+  },
+};
+
 // ---------- audit ----------
 
 export const audit = {

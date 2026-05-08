@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { signIn } from "../actions";
@@ -61,7 +62,9 @@ export default async function SignInPage({
         </button>
       </form>
       <p className="mt-6 text-xs text-neutral-500">
-        Forgot your password? Contact the site owner.
+        <Link href="/admin/forgot-password" className="underline hover:text-neutral-700">
+          Forgot your password?
+        </Link>
       </p>
     </main>
   );

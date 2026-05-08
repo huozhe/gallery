@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { ulid } from "ulid";
 import { z } from "zod";
-import { about, artworks, audit, sessions, tags, users } from "@/lib/store";
+import { about, artworks, audit, passwordResets, sessions, tags, users } from "@/lib/store";
 import type { AuditAction, Artwork } from "@/data/types";
 import {
   SESSION_COOKIE,
@@ -538,4 +538,92 @@ export async function deleteAdminUser(input: unknown): Promise<UserActionResult>
   await logAudit("user.delete", email, { email: { from: email, to: null } });
   revalidatePath("/admin/users");
   return { success: true };
+}
+
+// ---------- password reset ----------
+
+const RequestPasswordResetSchema = z.object({
+  email: z.string().email().transform((s) => s.toLowerCase()),
+});
+
+export async function requestPasswordReset(formData: FormData): Promise<void> {
+  const ip = await clientIp();
+  const rateKey = `pwreset:${ip}`;
+  if (!checkRateLimit(rateKey)) {
+    redirect("/admin/forgot-password?sent=1");
+  }
+  recordAttempt(rateKey);
+
+  const parsed = RequestPasswordResetSchema.safeParse({ email: formData.get("email") });
+  if (!parsed.success) {
+    redirect("/admin/forgot-password?sent=1");
+  }
+  const { email } = parsed.data;
+
+  const user = await users.getByEmail(email);
+  if (user) {
+    const { sendPasswordResetEmail } = await import("@/lib/email");
+    const rawToken = createSessionToken();
+    const tokenHash = hashSessionToken(rawToken);
+    const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+    await passwordResets.set(tokenHash, email, expiresAt);
+    const origin = (await headers()).get("origin") ?? (await headers()).get("x-forwarded-host") ?? "http://localhost:3000";
+    const resetUrl = `${origin}/admin/reset-password?token=${rawToken}`;
+    await sendPasswordResetEmail(email, resetUrl);
+    await audit.log({
+      id: ulid(),
+      at: new Date().toISOString(),
+      actorId: "anonymous",
+      actorEmail: email,
+      action: "user.password-reset-requested",
+      target: email,
+      ip,
+    });
+  }
+
+  redirect("/admin/forgot-password?sent=1");
+}
+
+const CompletePasswordResetSchema = z.object({
+  token: z.string().min(1),
+  newPassword: PasswordField,
+});
+
+export async function completePasswordReset(formData: FormData): Promise<void> {
+  const parsed = CompletePasswordResetSchema.safeParse({
+    token: formData.get("token"),
+    newPassword: formData.get("newPassword"),
+  });
+
+  if (!parsed.success) {
+    redirect("/admin/reset-password?error=invalid");
+  }
+
+  const { token: rawToken, newPassword } = parsed.data;
+  const tokenHash = hashSessionToken(rawToken);
+  const record = await passwordResets.get(tokenHash);
+
+  if (!record) {
+    redirect(`/admin/reset-password?token=${rawToken}&error=expired`);
+  }
+
+  const user = await users.getByEmail(record.email);
+  if (!user) {
+    redirect("/admin/forgot-password?error=notfound");
+  }
+
+  const newHash = await hashPassword(newPassword);
+  await users.upsert({ ...user, passwordHash: newHash });
+  await passwordResets.delete(tokenHash);
+  await audit.log({
+    id: ulid(),
+    at: new Date().toISOString(),
+    actorId: user.id,
+    actorEmail: user.email,
+    action: "user.password-reset-completed",
+    target: user.email,
+    ip: await clientIp(),
+  });
+
+  redirect("/admin/sign-in");
 }

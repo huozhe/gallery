@@ -81,6 +81,8 @@ export type AuditAction =
   | "user.create"
   | "user.delete"
   | "user.password-change"
+  | "user.password-reset-requested"
+  | "user.password-reset-completed"
   | "auth.sign-in"
   | "auth.sign-out"
   | "auth.failed"

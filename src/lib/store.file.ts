@@ -30,6 +30,7 @@ type StoreData = {
   tags: Record<string, Tag>;
   users: Record<string, User>; // keyed by lowercased email
   sessions: Record<string, Session>; // keyed by token hash
+  passwordResets: Record<string, { email: string; expiresAt: string }>; // keyed by token hash
   audit: AuditEntry[]; // newest-first, capped
   about?: AboutContent;
 };
@@ -40,7 +41,7 @@ const AUDIT_CAP = 5000;
 const writeChains = new Map<string, Promise<void>>();
 
 function emptyData(): StoreData {
-  return { artworks: {}, artworkCounter: 0, tags: {}, users: {}, sessions: {}, audit: [] };
+  return { artworks: {}, artworkCounter: 0, tags: {}, users: {}, sessions: {}, passwordResets: {}, audit: [] };
 }
 
 async function getDataFile(): Promise<string> {
@@ -320,6 +321,32 @@ export const sessions = {
   async delete(tokenHash: string): Promise<void> {
     await update((data) => {
       delete data.sessions[tokenHash];
+    });
+  },
+};
+
+// ---------- password resets ----------
+export const passwordResets = {
+  async set(tokenHash: string, email: string, expiresAt: string): Promise<void> {
+    await update((data) => {
+      data.passwordResets[tokenHash] = { email, expiresAt };
+    });
+  },
+
+  async get(tokenHash: string): Promise<{ email: string; expiresAt: string } | null> {
+    const data = await readFile();
+    const record = data.passwordResets[tokenHash];
+    if (!record) return null;
+    if (new Date(record.expiresAt).getTime() < Date.now()) {
+      await update((d) => { delete d.passwordResets[tokenHash]; });
+      return null;
+    }
+    return record;
+  },
+
+  async delete(tokenHash: string): Promise<void> {
+    await update((data) => {
+      delete data.passwordResets[tokenHash];
     });
   },
 };

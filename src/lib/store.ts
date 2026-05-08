@@ -11,6 +11,7 @@ export const artworks = impl.artworks;
 export const tags = impl.tags;
 export const users = impl.users;
 export const sessions = impl.sessions;
+export const passwordResets = impl.passwordResets;
 export const audit = impl.audit;
 export const about = impl.about;
 export const blob = impl.blob;

@@ -10,7 +10,11 @@ export function proxy(req: NextRequest) {
   }
 
   const { pathname } = req.nextUrl;
-  if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/sign-in")) {
+  const isPublicAdminRoute =
+    pathname.startsWith("/admin/sign-in") ||
+    pathname.startsWith("/admin/forgot-password") ||
+    pathname.startsWith("/admin/reset-password");
+  if (pathname.startsWith("/admin") && !isPublicAdminRoute) {
     if (!req.cookies.has(SESSION_COOKIE)) {
       const url = req.nextUrl.clone();
       url.pathname = "/admin/sign-in";
