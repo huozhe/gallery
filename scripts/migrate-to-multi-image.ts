@@ -63,7 +63,6 @@ async function main() {
   }
 
   console.log(`\nDone. ${migrated} artworks migrated, ${all.length - migrated} skipped.`);
-  process.exit(0);
 }
 
 main().catch((err) => {

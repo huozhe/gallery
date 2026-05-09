@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "tsx scripts/migrate-to-multi-image.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
