@@ -9,8 +9,6 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "migrate": "tsx scripts/migrate.ts",
-    "migrate:images": "tsx scripts/migrate-images.ts",
     "migrate:multi-image": "tsx scripts/migrate-to-multi-image.ts",
     "admin:create": "tsx scripts/admin-create.ts"
   },
