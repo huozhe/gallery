@@ -1,5 +1,13 @@
 export type ArtworkStatus = "live" | "draft" | "hidden" | "deleted";
 
+export type ArtworkImage = {
+  url: string;
+  originalUrl?: string;
+  filename?: string;
+  width: number;
+  height: number;
+};
+
 export type ArtworkReference = {
   caption: string;
   url?: string;
@@ -18,17 +26,13 @@ export type Artwork = {
   dimensions?: string;
   description?: string;
   blobId: string;
-  image: string;
-  originalImage?: string;
-  imageFilename?: string;
-  width: number;
-  height: number;
+  images: ArtworkImage[];
+  references: ArtworkReference[];
 
   tagIds: string[];
   status: ArtworkStatus;
   orderByTag: Record<string, number>;
   orderGlobal: number;
-  reference?: ArtworkReference;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;

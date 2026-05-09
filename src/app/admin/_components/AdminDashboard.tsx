@@ -243,7 +243,7 @@ function Row({
       <div className="text-neutral-400">{dragHandle}</div>
       <div className="relative w-[60px] h-[60px] bg-neutral-100 overflow-hidden">
         <Image
-          src={work.image}
+          src={work.images[0]?.url ?? ""}
           alt={work.title}
           fill
           sizes="60px"

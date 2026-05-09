@@ -111,28 +111,53 @@ beforeEach(() => {
 });
 
 describe("saveArtwork", () => {
+  const baseArtwork = {
+    id: 0,
+    blobId: "aaaaaaaa-0000-0000-0000-000000000001",
+    slug: "w1",
+    title: "Test",
+    year: 2024,
+    medium: "Oil",
+    images: [{ url: "/test.jpg", width: 800, height: 600 }],
+    references: [],
+    status: "live" as const,
+    tagIds: [],
+    orderGlobal: 0,
+    orderByTag: {},
+    isNew: true,
+  };
+
   it("creates a new artwork", async () => {
     mockArtworksGetBySlug.mockResolvedValue(null);
     mockArtworksUpsert.mockResolvedValue({ id: 1, slug: "w1" });
+    const result = await saveArtwork(baseArtwork);
+    expect(result.success).toBe(true);
+    expect(mockArtworksUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      images: [{ url: "/test.jpg", width: 800, height: 600 }],
+      references: [],
+    }));
+    expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.create" }));
+  });
+
+  it("creates a new artwork with multiple images and references", async () => {
+    mockArtworksGetBySlug.mockResolvedValue(null);
+    mockArtworksUpsert.mockResolvedValue({ id: 1, slug: "w1" });
     const result = await saveArtwork({
-      id: 0,
-      blobId: "aaaaaaaa-0000-0000-0000-000000000001",
-      slug: "w1",
-      title: "Test",
-      year: 2024,
-      medium: "Oil",
-      image: "/test.jpg",
-      width: 800,
-      height: 600,
-      status: "live",
-      tagIds: [],
-      orderGlobal: 0,
-      orderByTag: {},
-      isNew: true,
+      ...baseArtwork,
+      images: [
+        { url: "/img1.webp", width: 800, height: 600 },
+        { url: "/img2.webp", width: 400, height: 300 },
+      ],
+      references: [
+        { caption: "Source A", url: "https://example.com" },
+        { caption: "Source B", image: "/ref.webp", imageWidth: 100, imageHeight: 100 },
+      ],
     });
     expect(result.success).toBe(true);
-    expect(mockArtworksUpsert).toHaveBeenCalled();
-    expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.create" }));
+    expect(mockArtworksUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      images: expect.arrayContaining([expect.objectContaining({ url: "/img1.webp" })]),
+      references: expect.arrayContaining([expect.objectContaining({ caption: "Source A" })]),
+    }));
   });
 
   it("updates existing artwork", async () => {
@@ -140,45 +165,56 @@ describe("saveArtwork", () => {
     mockArtworksUpsert.mockResolvedValue({ id: 1, slug: "w1" });
     mockArtworksGet.mockResolvedValue(null);
     const result = await saveArtwork({
+      ...baseArtwork,
       id: 1,
       blobId: "aaaaaaaa-0000-0000-0000-000000000002",
-      slug: "w1",
       title: "Updated",
-      year: 2024,
-      medium: "Oil",
-      image: "/test.jpg",
-      width: 800,
-      height: 600,
-      status: "live",
-      tagIds: [],
-      orderGlobal: 0,
-      orderByTag: {},
       isNew: false,
     });
     expect(result.success).toBe(true);
     expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.update" }));
   });
 
+  it("on update deletes removed image blobs but not retained ones", async () => {
+    const removedUrl = "https://abc.public.blob.vercel-storage.com/old.webp";
+    const keptUrl = "https://abc.public.blob.vercel-storage.com/kept.webp";
+    mockArtworksGetBySlug.mockResolvedValue(null);
+    mockArtworksUpsert.mockResolvedValue({ id: 1, slug: "w1" });
+    mockArtworksGet.mockResolvedValue({
+      id: 1, slug: "w1", title: "Test",
+      images: [
+        { url: removedUrl, width: 100, height: 100 },
+        { url: keptUrl, width: 200, height: 200 },
+      ],
+      references: [],
+    });
+    const mockDel = vi.fn();
+    vi.doMock("@vercel/blob", () => ({ del: mockDel }));
+    process.env.BLOB_READ_WRITE_TOKEN = "test-token";
+    await saveArtwork({
+      ...baseArtwork,
+      id: 1,
+      isNew: false,
+      images: [{ url: keptUrl, width: 200, height: 200 }],
+    });
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    // keptUrl was not passed to deleteBlobs, only removedUrl was
+    expect(mockArtworksUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      images: [{ url: keptUrl, width: 200, height: 200 }],
+    }));
+  });
+
   it("rejects duplicate slug on create", async () => {
     mockArtworksGetBySlug.mockResolvedValue({ id: 1, slug: "w1", title: "Existing" });
-    const result = await saveArtwork({
-      id: 0,
-      blobId: "aaaaaaaa-0000-0000-0000-000000000001",
-      slug: "w1",
-      title: "Test",
-      year: 2024,
-      medium: "Oil",
-      image: "/test.jpg",
-      width: 800,
-      height: 600,
-      status: "live",
-      tagIds: [],
-      orderGlobal: 0,
-      orderByTag: {},
-      isNew: true,
-    });
+    const result = await saveArtwork(baseArtwork);
     expect(result.success).toBe(false);
     expect(result.error).toContain("already exists");
+  });
+
+  it("rejects empty images array", async () => {
+    const result = await saveArtwork({ ...baseArtwork, images: [] });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("image");
   });
 
   it("validates required fields", async () => {
@@ -261,7 +297,11 @@ describe("restoreArtwork", () => {
 
 describe("purgeArtwork", () => {
   it("permanently deletes an artwork", async () => {
-    mockArtworksGet.mockResolvedValue({ id: 1, slug: "w1", title: "Test" });
+    mockArtworksGet.mockResolvedValue({
+      id: 1, slug: "w1", title: "Test",
+      images: [{ url: "/img.webp", width: 100, height: 100 }],
+      references: [],
+    });
     await purgeArtwork(1);
     expect(mockArtworksPurge).toHaveBeenCalledWith(1);
     expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "artwork.purge" }));

@@ -1,3 +1,4 @@
+// @ts-nocheck — legacy script, references old Artwork fields (pre-multi-image migration)
 /**
  * Renames existing reference image Blob files to UUID-based paths,
  * matching the convention used for artwork images after migrate-to-uuids.ts.

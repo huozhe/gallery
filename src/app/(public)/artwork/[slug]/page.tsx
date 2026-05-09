@@ -25,9 +25,10 @@ export async function generateMetadata({
     ? artwork.description.split("\n")[0].slice(0, 160)
     : `${artwork.title}, ${artwork.year}. ${artwork.medium}.`;
 
-  const imageUrl = artwork.image.startsWith("http")
-    ? artwork.image
-    : `${baseUrl}${artwork.image}`;
+  const primary = artwork.images[0];
+  const imageUrl = primary.url.startsWith("http")
+    ? primary.url
+    : `${baseUrl}${primary.url}`;
 
   return {
     title: `${artwork.title} — ${tenant.name}`,
@@ -36,7 +37,7 @@ export async function generateMetadata({
       title: artwork.title,
       description,
       type: "article",
-      images: [{ url: imageUrl, width: artwork.width, height: artwork.height, alt: artwork.title }],
+      images: [{ url: imageUrl, width: primary.width, height: primary.height, alt: artwork.title }],
     },
     twitter: {
       card: "summary_large_image",
@@ -71,8 +72,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Metadata({ artwork }: { artwork: Artwork }) {
-  const ref = artwork.reference;
+function ArtworkMetadata({ artwork }: { artwork: Artwork }) {
   return (
     <div>
       <h1 className="text-2xl font-medium">{artwork.title}</h1>
@@ -120,30 +120,35 @@ function Metadata({ artwork }: { artwork: Artwork }) {
         </div>
       )}
 
-      {ref && (
+      {artwork.references.length > 0 && (
         <div className="mt-8 pt-6 border-t border-neutral-200">
           <SectionLabel>Reference</SectionLabel>
-          <div className="text-sm text-neutral-600 space-y-3">
-            {ref.image && (
-              <ReferenceImage
-                src={ref.image}
-                alt={ref.caption}
-                width={ref.imageWidth ?? 800}
-                height={ref.imageHeight ?? 600}
-                caption={ref.caption}
-              />
-            )}
-            <p>{ref.caption}</p>
-            {ref.url && (
-              <a
-                href={ref.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-neutral-900 transition-colors"
-              >
-                link ↗
-              </a>
-            )}
+          <div className="space-y-6">
+            {artwork.references.map((ref, i) => (
+              <div key={i} className="text-sm text-neutral-600 space-y-3">
+                {ref.image && (
+                  <ReferenceImage
+                    src={ref.image}
+                    alt={ref.caption}
+                    width={ref.imageWidth ?? 800}
+                    height={ref.imageHeight ?? 600}
+                    caption={ref.caption}
+                    index={i}
+                  />
+                )}
+                <p>{ref.caption}</p>
+                {ref.url && (
+                  <a
+                    href={ref.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-neutral-900 transition-colors"
+                  >
+                    link ↗
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -175,7 +180,8 @@ export default async function ArtworkPage({
   const prevWork = pos > 0 ? roomWorks[pos - 1] : null;
   const nextWork = pos !== -1 && pos < roomWorks.length - 1 ? roomWorks[pos + 1] : null;
 
-  const isLandscape = artwork.width > artwork.height;
+  const primary = artwork.images[0];
+  const isLandscape = primary.width > primary.height;
 
   return (
     <main className="px-8 py-12 max-w-5xl mx-auto">
@@ -196,23 +202,13 @@ export default async function ArtworkPage({
 
       {isLandscape ? (
         <div className="space-y-8">
-          <ArtworkImage
-            src={artwork.image}
-            alt={artwork.title}
-            width={artwork.width}
-            height={artwork.height}
-          />
-          <Metadata artwork={artwork} />
+          <ArtworkImage images={artwork.images} alt={artwork.title} />
+          <ArtworkMetadata artwork={artwork} />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-12 items-start">
-          <ArtworkImage
-            src={artwork.image}
-            alt={artwork.title}
-            width={artwork.width}
-            height={artwork.height}
-          />
-          <Metadata artwork={artwork} />
+          <ArtworkImage images={artwork.images} alt={artwork.title} />
+          <ArtworkMetadata artwork={artwork} />
         </div>
       )}
 

@@ -8,9 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # start local dev server at http://localhost:3000
 npm run build    # production build + type check
 npm run lint     # ESLint
-npm test         # Vitest (112 tests); npx vitest run --coverage for coverage report
+npm test         # Vitest (115 tests); npx vitest run --coverage for coverage report
 # /sitemap.xml and /robots.txt are dynamic server routes (src/app/sitemap.ts, robots.ts)
-npm run migrate:images  # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
+npm run migrate:images       # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
+npm run migrate:multi-image  # one-shot: convert artworks to multi-image format; requires REDIS_URL
+# IMPORTANT: tsx does NOT auto-load .env.local — for Redis scripts use:
+#   node_modules/.bin/tsx --env-file .env.local scripts/<script>.ts
 ```
 
 ## Architecture
@@ -111,6 +114,8 @@ Every upload is processed through `sharp`: resized to ≤2000px on the longest e
 - **Production**: WebP → Blob at `{tenant.blobPrefix}artists/{tenant.blobId}/{dir}/{uuid}.webp`. Full Blob URLs stored on the artwork record.
 - **`Artwork.blobId`** is a stable UUID assigned at creation and used as the artwork's blob directory name.
 - **Stale blobs** are deleted by `saveArtwork` when image URLs change on update; `purgeArtwork` deletes all artwork blobs.
+
+**Multi-image model:** Each artwork has `images: ArtworkImage[]` (first = primary/cover) and `references: ArtworkReference[]`. `ArtworkImage = { url, originalUrl?, filename?, width, height }`. `ArtworkReference` unchanged shape; now used as an array. Admin form supports drag-to-reorder for both. Public detail page shows a thumbnail strip + lightbox with prev/next chevrons when multiple images. Each reference with an image opens its own floating panel. Before adding new artworks to a Redis prefix that has old-format data, run `npm run migrate:multi-image` with the correct prefix set.
 
 `next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`.
 

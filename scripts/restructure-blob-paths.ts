@@ -1,3 +1,4 @@
+// @ts-nocheck — legacy script, references old Artwork fields (pre-multi-image migration)
 /**
  * Migrates existing blob files from the flat structure to the per-artwork structure:
  *

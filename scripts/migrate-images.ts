@@ -1,3 +1,4 @@
+// @ts-nocheck — legacy script, references old Artwork fields (pre-multi-image migration)
 // One-shot script: converts existing artwork images to WebP and saves originals.
 // Works in both local dev (file store) and production (Blob + Redis).
 //

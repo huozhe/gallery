@@ -1,3 +1,4 @@
+// @ts-nocheck — legacy script, references old Artwork fields (pre-multi-image migration)
 /**
  * Assigns a stable UUID blobId to each artwork and migrates blob paths from
  * numeric IDs to opaque UUIDs at both the artist and artwork level:

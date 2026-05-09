@@ -9,23 +9,24 @@ type Props = {
   width: number;
   height: number;
   caption: string;
+  index?: number;
 };
 
-export default function ReferenceImage({ src, alt, width, height, caption }: Props) {
+export default function ReferenceImage({ src, alt, width, height, caption, index = 0 }: Props) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const dragging = useRef(false);
   const origin = useRef({ mx: 0, my: 0, px: 0, py: 0 });
 
-  // Place the panel near the top-right of the viewport on first open.
+  // Stagger panel position by index so multiple panels don't stack exactly.
   useEffect(() => {
     if (open) {
       setPos({
-        x: Math.max(16, window.innerWidth - 420),
-        y: 88,
+        x: Math.max(16, window.innerWidth - 420 - index * 30),
+        y: 88 + index * 30,
       });
     }
-  }, [open]);
+  }, [open, index]);
 
   useEffect(() => {
     if (!open) return;

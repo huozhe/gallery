@@ -377,7 +377,7 @@ function SortableWorkRow({ work, tagId }: { work: Artwork; tagId: string }) {
         ⋮⋮
       </button>
       <div className="relative w-10 h-10 bg-neutral-100 overflow-hidden shrink-0">
-        <Image src={work.image} alt={work.title} fill sizes="40px" className="object-cover" />
+        <Image src={work.images[0]?.url ?? ""} alt={work.title} fill sizes="40px" className="object-cover" />
       </div>
       <div className="min-w-0">
         <div className="text-sm font-medium truncate">{work.title}</div>

@@ -1,3 +1,4 @@
+// @ts-nocheck — legacy script, references old Artwork fields (pre-multi-image migration)
 /**
  * Copies all un-prefixed prod Blob files to the "prod/" namespace and updates
  * Redis artwork records to point to the new URLs.

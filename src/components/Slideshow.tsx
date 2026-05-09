@@ -85,7 +85,7 @@ export default function Slideshow({ artworks, onClose }: { artworks: Artwork[]; 
         style={{ opacity: visible ? 1 : 0, transitionDuration: `${FADE_MS}ms` }}
       >
         <Image
-          src={artwork.image}
+          src={artwork.images[0].url}
           alt={artwork.title}
           fill
           className="object-contain"

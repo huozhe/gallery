@@ -33,7 +33,10 @@ async function deleteBlobs(urls: (string | undefined)[]): Promise<void> {
 }
 
 async function deleteArtworkBlobs(artwork: Artwork): Promise<void> {
-  await deleteBlobs([artwork.image, artwork.originalImage, artwork.reference?.image]);
+  await deleteBlobs([
+    ...(artwork.images ?? []).flatMap((img) => [img.url, img.originalUrl]),
+    ...(artwork.references ?? []).map((r) => r.image),
+  ]);
 }
 
 // ---------- helpers ----------
@@ -180,6 +183,23 @@ export async function signOut(): Promise<void> {
 
 // ---------- artwork save / create ----------
 
+const ArtworkImageSchema = z.object({
+  url: z.string().min(1),
+  originalUrl: z.string().optional(),
+  filename: z.string().optional(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+});
+
+const ArtworkReferenceSchema = z.object({
+  caption: z.string().min(1),
+  url: z.string().optional(),
+  image: z.string().optional(),
+  imageWidth: z.number().int().positive().optional(),
+  imageHeight: z.number().int().positive().optional(),
+  imageFilename: z.string().optional(),
+});
+
 const SaveArtworkSchema = z.object({
   id: z.number().int().min(0),
   slug: z
@@ -193,26 +213,12 @@ const SaveArtworkSchema = z.object({
   dimensions: z.string().optional(),
   description: z.string().optional(),
   blobId: z.string().min(1),
-  image: z.string().min(1, "Image required"),
-  originalImage: z.string().optional(),
-  imageFilename: z.string().optional(),
-  width: z.number().int().positive(),
-  height: z.number().int().positive(),
+  images: z.array(ArtworkImageSchema).min(1, "At least one image is required"),
+  references: z.array(ArtworkReferenceSchema),
   status: z.enum(["live", "draft", "hidden"]),
   tagIds: z.array(z.string()),
   orderGlobal: z.number().int().min(0),
   orderByTag: z.record(z.string(), z.number()),
-  reference: z
-    .object({
-      caption: z.string().min(1),
-      url: z.string().optional(),
-      image: z.string().optional(),
-      imageWidth: z.number().int().positive().optional(),
-      imageHeight: z.number().int().positive().optional(),
-      imageFilename: z.string().optional(),
-    })
-    .nullable()
-    .optional(),
   isNew: z.boolean(),
 });
 
@@ -242,11 +248,17 @@ export async function saveArtwork(input: unknown): Promise<SaveArtworkResult> {
     }
     const stored = await artworks.get(artworkId);
     if (stored) {
-      await deleteBlobs([
-        stored.image !== d.image ? stored.image : undefined,
-        stored.originalImage !== d.originalImage ? stored.originalImage : undefined,
-        stored.reference?.image !== d.reference?.image ? stored.reference?.image : undefined,
-      ]);
+      const allOld = [
+        ...(stored.images ?? []).flatMap((img) => [img.url, img.originalUrl]),
+        ...(stored.references ?? []).map((r) => r.image),
+      ].filter(Boolean) as string[];
+      const allNew = new Set(
+        [
+          ...d.images.flatMap((img) => [img.url, img.originalUrl]),
+          ...d.references.map((r) => r.image),
+        ].filter(Boolean) as string[],
+      );
+      await deleteBlobs(allOld.filter((url) => !allNew.has(url)));
     }
   }
 
@@ -260,16 +272,12 @@ export async function saveArtwork(input: unknown): Promise<SaveArtworkResult> {
     dimensions: d.dimensions || undefined,
     description: d.description || undefined,
     blobId: d.blobId,
-    image: d.image,
-    originalImage: d.originalImage,
-    imageFilename: d.imageFilename,
-    width: d.width,
-    height: d.height,
+    images: d.images,
+    references: d.references,
     status: d.status,
     tagIds: d.tagIds,
     orderGlobal: d.orderGlobal,
     orderByTag: d.orderByTag,
-    reference: d.reference ?? undefined,
     createdAt: now,
     updatedAt: now,
   });
