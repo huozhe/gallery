@@ -9,7 +9,6 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "migrate:multi-image": "tsx scripts/migrate-to-multi-image.ts",
     "admin:create": "tsx scripts/admin-create.ts"
   },
   "dependencies": {
