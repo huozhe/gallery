@@ -77,10 +77,12 @@ describe("getTenantFromHeaders", () => {
     expect(tenant.blobPrefix).toBe("fallback/");
   });
 
-  it("uses default blobId fallback when x-tenant-blob-id is absent", () => {
+  it("falls back to ARTIST_BLOB_ID env var when x-tenant-blob-id header is absent", () => {
+    process.env.ARTIST_BLOB_ID = "env-blob-id";
     const h = makeHeaders({ "x-tenant-id": "alice" });
     const tenant = getTenantFromHeaders(h);
-    expect(tenant.blobId).toBe("00000000-0000-0000-0000-0000000000ff");
+    expect(tenant.blobId).toBe("env-blob-id");
+    delete process.env.ARTIST_BLOB_ID;
   });
 
   it("uses x-tenant-id as name when x-tenant-name is absent", () => {

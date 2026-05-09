@@ -39,7 +39,7 @@ function singleTenantFallback(): Tenant {
     name: "Gallery",
     redisPrefix: process.env.REDIS_KEY_PREFIX ?? "",
     blobPrefix: process.env.BLOB_PATH_PREFIX ?? "",
-    blobId: process.env.ARTIST_BLOB_ID ?? "00000000-0000-0000-0000-0000000000ff",
+    blobId: process.env.ARTIST_BLOB_ID ?? "",
   };
 }
 

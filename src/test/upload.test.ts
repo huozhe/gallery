@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { cookies } from "next/headers";
-import { ARTIST_BLOB_ID } from "@/lib/config";
 
+const ARTIST_BLOB_ID = "00000000-0000-0000-0000-0000000000ff";
 const mockSessionsGet = vi.fn();
 vi.mock("@/lib/store", () => ({
   sessions: { get: mockSessionsGet },
@@ -45,6 +45,7 @@ beforeEach(() => {
   mockSharpInstance.toBuffer.mockResolvedValue({ data: Buffer.from("webp"), info: { width: 800, height: 600 } });
   delete process.env.BLOB_READ_WRITE_TOKEN;
   delete process.env.BLOB_PATH_PREFIX;
+  process.env.ARTIST_BLOB_ID = ARTIST_BLOB_ID;
   (cookies as ReturnType<typeof vi.fn>).mockResolvedValue({
     get: vi.fn((name: string) => name === "gallery_session" ? { value: "tok123" } : undefined),
   });
