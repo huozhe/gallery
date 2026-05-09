@@ -5,13 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev      # start local dev server at http://localhost:3000
-npm run build    # production build + type check
-npm run lint     # ESLint
-npm test         # Vitest (115 tests); npx vitest run --coverage for coverage report
+npm run dev        # start local dev server at http://localhost:3000
+npm run build      # production build + type check
+npm run lint       # ESLint
+npm test           # Vitest (115 tests); npx vitest run --coverage for coverage report
+npm run admin:create -- email password  # bootstrap admin user (CLI)
 # /sitemap.xml and /robots.txt are dynamic server routes (src/app/sitemap.ts, robots.ts)
-npm run migrate:images       # one-shot: convert artwork images to WebP (run with env loaded for Redis+Blob)
-npm run migrate:multi-image  # one-shot: convert artworks to multi-image format; requires REDIS_URL
 # IMPORTANT: tsx does NOT auto-load .env.local — for Redis scripts use:
 #   node_modules/.bin/tsx --env-file .env.local scripts/<script>.ts
 ```
