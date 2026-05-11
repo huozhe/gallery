@@ -77,7 +77,7 @@ Seed data lives in `src/data/seed.ts`. To reset local dev: `rm -rf .data && npm 
 
 **Public (route group `(public)`):**
 - `/` — curatorial rooms view: live works grouped by visible primary-room tags, sorted by `orderByTag[tag.id]`. Slideshow button opens full-screen fade viewer.
-- `/artwork/[slug]` — orientation-aware layout; lightbox; reference image draggable overlay; prev/next nav scoped to primary room. Full OG + `twitter:card summary_large_image` metadata.
+- `/artwork/[slug]` — orientation-aware layout; lightbox; reference image draggable panel with **Compare with artwork** tool (full-screen split-view with divider, `−`/`+` scale, drag-to-pan reference, and two-point alignment that auto-solves scale/rotation/translation); prev/next nav scoped to primary room. Full OG + `twitter:card summary_large_image` metadata.
 - `/about` — bio read from store; contact form (sends to `about.email` via Resend); artist email not displayed publicly.
 - `/sitemap.xml` — dynamic; lists homepage, about, all live artwork URLs with `lastModified`.
 - `/robots.txt` — allows public pages, blocks `/admin/`, references sitemap.
@@ -114,7 +114,9 @@ Every upload is processed through `sharp`: resized to ≤2000px on the longest e
 - **`Artwork.blobId`** is a stable UUID assigned at creation and used as the artwork's blob directory name.
 - **Stale blobs** are deleted by `saveArtwork` when image URLs change on update; `purgeArtwork` deletes all artwork blobs.
 
-**Multi-image model:** Each artwork has `images: ArtworkImage[]` (first = primary/cover) and `references: ArtworkReference[]`. `ArtworkImage = { url, originalUrl?, filename?, width, height }`. `ArtworkReference` unchanged shape; now used as an array. Admin form supports drag-to-reorder for both. Public detail page shows a thumbnail strip + lightbox with prev/next chevrons when multiple images. Each reference with an image opens its own floating panel. Before adding new artworks to a Redis prefix that has old-format data, run `npm run migrate:multi-image` with the correct prefix set.
+**Multi-image model:** Each artwork has `images: ArtworkImage[]` (first = primary/cover) and `references: ArtworkReference[]`. `ArtworkImage = { url, originalUrl?, filename?, width, height }`. `ArtworkReference` unchanged shape; now used as an array. Admin form supports drag-to-reorder for both. Public detail page shows a thumbnail strip + lightbox with prev/next chevrons when multiple images. Each reference with an image opens its own floating panel.
+
+**Compare-with-artwork sync:** `ArtworkImage.tsx` dispatches a `document` `CustomEvent` (`artworkimage:change`, `detail: { url }`) whenever the user changes the focused image in the carousel. `ReferenceImage.tsx` listens for it so the compare tool always uses the currently focused artwork image (not just `images[0]`).
 
 `next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`.
 
