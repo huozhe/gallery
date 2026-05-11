@@ -561,7 +561,7 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
                     className="w-10 h-10 flex items-center justify-center text-neutral-300 hover:text-white active:bg-neutral-700 transition-colors text-lg font-medium"
                     aria-label="Decrease scale"
                   >−</button>
-                  <span className="w-12 text-center text-xs text-neutral-300 tabular-nums shrink-0">{refScale}%</span>
+                  <span className="w-12 text-center text-xs text-neutral-300 tabular-nums shrink-0">{Math.round(refScale)}%</span>
                   <button
                     onClick={() => setRefScale((s) => Math.min(200, s + 5))}
                     className="w-10 h-10 flex items-center justify-center text-neutral-300 hover:text-white active:bg-neutral-700 transition-colors text-lg font-medium"
