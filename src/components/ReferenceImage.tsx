@@ -511,7 +511,13 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
                   onPointerUp={stopDividerDrag}
                   onPointerCancel={stopDividerDrag}
                 >
-                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-10 h-10 bg-white rounded-full flex items-center justify-center text-neutral-600 shadow-lg text-sm pointer-events-none">
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-10 h-10 bg-white rounded-full flex items-center justify-center text-neutral-600 shadow-lg text-sm cursor-col-resize touch-none"
+                    onPointerDown={startDividerDrag}
+                    onPointerMove={onDividerMove}
+                    onPointerUp={stopDividerDrag}
+                    onPointerCancel={stopDividerDrag}
+                  >
                     ↔
                   </div>
                 </div>
