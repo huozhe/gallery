@@ -55,6 +55,13 @@ export function resolveTenant(hostHeader: string | null): Tenant | null {
 }
 
 /**
+ * Return all configured tenants, or null in legacy single-tenant mode.
+ */
+export function getAllTenants(): Tenant[] | null {
+  return TENANTS;
+}
+
+/**
  * Find a tenant by its Redis prefix. Used by ensureSeeded() to resolve
  * per-tenant admin credentials without needing request headers.
  */

@@ -484,8 +484,10 @@ export type BackupData = {
   data: Record<string, BackupEntry>;
 };
 
-export async function backupRedis(): Promise<BackupData> {
-  const r = await getClient();
+export async function backupRedis(explicitPrefix?: string): Promise<BackupData> {
+  const r = explicitPrefix !== undefined
+    ? new PrefixedRedis(getRawConnection(), explicitPrefix)
+    : await getClient();
   const keys = await r.scan("*");
   const data: Record<string, BackupEntry> = {};
   for (const key of keys) {

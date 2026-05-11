@@ -6,6 +6,11 @@ export function proxy(req: NextRequest) {
   const tenant = resolveTenant(req.headers.get("host"));
 
   if (!tenant) {
+    // API routes handle their own auth — don't block them for unknown hosts.
+    // This lets Vercel cron (which may use an internal hostname) reach /api/admin/backup.
+    if (req.nextUrl.pathname.startsWith("/api/")) {
+      return NextResponse.next();
+    }
     return new NextResponse("Not found", { status: 404 });
   }
 
