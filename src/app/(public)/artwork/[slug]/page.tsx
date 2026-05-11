@@ -134,6 +134,7 @@ function ArtworkMetadata({ artwork }: { artwork: Artwork }) {
                     height={ref.imageHeight ?? 600}
                     caption={ref.caption}
                     index={i}
+                    artworkImageUrl={artwork.images[0]?.originalUrl ?? artwork.images[0]?.url}
                   />
                 )}
                 <p>{ref.caption}</p>

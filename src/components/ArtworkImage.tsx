@@ -30,6 +30,14 @@ export default function ArtworkImage({ images, alt }: Props) {
     return () => document.removeEventListener("keydown", onKey);
   }, [open, prev, next]);
 
+  useEffect(() => {
+    const img = images[currentIdx] ?? images[0];
+    if (!img) return;
+    document.dispatchEvent(
+      new CustomEvent("artworkimage:change", { detail: { url: img.originalUrl ?? img.url } })
+    );
+  }, [currentIdx, images]);
+
   if (!current) return null;
 
   return (
