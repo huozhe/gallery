@@ -79,6 +79,7 @@ Seed data lives in `src/data/seed.ts`. To reset local dev: `rm -rf .data && npm 
 - `/` — curatorial rooms view: live works grouped by visible primary-room tags, sorted by `orderByTag[tag.id]`. Slideshow button opens full-screen fade viewer.
 - `/artwork/[slug]` — orientation-aware layout; lightbox; reference image draggable panel with **Compare with artwork** tool (full-screen view with three modes: `↔` horizontal split, `↕` vertical split, `⧉` overlay with adjustable opacity; `−`/`+` scale, drag-to-pan reference, and two-point alignment that auto-solves scale/rotation/translation; align first then switch to `⧉` for tracing); prev/next nav scoped to primary room. Full OG + `twitter:card summary_large_image` metadata.
 - `/about` — bio read from store; contact form (sends to `about.email` via Resend); artist email not displayed publicly.
+- `/compare` — **unlinked guest tool**: amateur painters drop in their painting + a reference photo (PNG/JPEG/WebP) and use the full compare/alignment surface. Pure client-side via `URL.createObjectURL`; no upload, no persistence, `robots: noindex,nofollow`. Sequential `pick-painting → pick-reference → comparing` stages in `CompareGuestClient`.
 - `/sitemap.xml` — dynamic; lists homepage, about, all live artwork URLs with `lastModified`.
 - `/robots.txt` — allows public pages, blocks `/admin/`, references sitemap.
 - `not-found.tsx` — "Plate · 404" page.
@@ -117,6 +118,8 @@ Every upload is processed through `sharp`: resized to ≤2000px on the longest e
 **Multi-image model:** Each artwork has `images: ArtworkImage[]` (first = primary/cover) and `references: ArtworkReference[]`. `ArtworkImage = { url, originalUrl?, filename?, width, height }`. `ArtworkReference` unchanged shape; now used as an array. Admin form supports drag-to-reorder for both. Public detail page shows a thumbnail strip + lightbox with prev/next chevrons when multiple images. Each reference with an image opens its own floating panel.
 
 **Compare-with-artwork sync:** `ArtworkImage.tsx` dispatches a `document` `CustomEvent` (`artworkimage:change`, `detail: { url }`) whenever the user changes the focused image in the carousel. `ReferenceImage.tsx` listens for it so the compare tool always uses the currently focused artwork image (not just `images[0]`).
+
+**Compare surface extraction:** The full-screen compare/alignment overlay lives in `src/components/CompareSurface.tsx` (helpers, 3-mode state, alignment pinch-zoom). Both `ReferenceImage.tsx` (artwork page) and `CompareGuestClient.tsx` (`/compare`) mount it via `<CompareSurface artworkUrl referenceUrl referenceWidth referenceHeight referenceCaption alt onClose />`. Inside the surface, plain `<img>` is used instead of `next/image` so blob URLs (guest mode) and HTTPS Blob URLs (artwork page) share one rendering path. `<img>` is used here because `next/image` would require `unoptimized` for `blob:` schemes and the surface is `position: absolute; inset: 0` — the optimizer adds no value at viewport-fill size.
 
 `next.config.ts` allows `*.public.blob.vercel-storage.com` in `remotePatterns`.
 
