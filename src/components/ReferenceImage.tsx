@@ -57,6 +57,8 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [comparing, setComparing] = useState(false);
   const [dividerPos, setDividerPos] = useState(50);
+  const [compareMode, setCompareMode] = useState<"horizontal" | "vertical" | "overlay">("horizontal");
+  const [overlayOpacity, setOverlayOpacity] = useState(50);
   const [refScale, setRefScale] = useState(100);
   const [refOffset, setRefOffset] = useState({ x: 0, y: 0 });
   const [refRotation, setRefRotation] = useState(0);
@@ -164,8 +166,13 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
   function onDividerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!isDraggingDivider.current || !compareContainerRef.current) return;
     const rect = compareContainerRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    setDividerPos((x / rect.width) * 100);
+    if (compareMode === "vertical") {
+      const y = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
+      setDividerPos((y / rect.height) * 100);
+    } else {
+      const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      setDividerPos((x / rect.width) * 100);
+    }
   }
 
   function stopDividerDrag() {
@@ -454,7 +461,7 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
               </div>
             ) : (
               <>
-                {/* Compare view — both object-cover so centers align */}
+                {/* Artwork — object-cover so centers align */}
                 <Image
                   src={currentArtworkUrl}
                   alt={alt}
@@ -465,10 +472,16 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
                   onLoad={onArtworkLoad}
                 />
 
-                {/* Reference, clipped to right of divider, then transformed */}
+                {/* Reference layer — clipped (split modes) or full with opacity (overlay) */}
                 <div
                   className="absolute inset-0"
-                  style={{ clipPath: `inset(0 0 0 ${dividerPos}%)` }}
+                  style={
+                    compareMode === "horizontal"
+                      ? { clipPath: `inset(0 0 0 ${dividerPos}%)` }
+                      : compareMode === "vertical"
+                        ? { clipPath: `inset(${dividerPos}% 0 0 0)` }
+                        : { opacity: overlayOpacity / 100, pointerEvents: "none" }
+                  }
                 >
                   <div
                     className="absolute inset-0"
@@ -489,38 +502,76 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
                   Artwork
                 </span>
                 <span className="absolute top-3 right-3 text-xs text-white/80 bg-black/40 px-2 py-0.5 pointer-events-none">
-                  Reference
+                  {compareMode === "overlay" ? "Reference (overlay)" : "Reference"}
                 </span>
 
-                {/* Pan overlay on the reference side */}
-                <div
-                  className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing"
-                  style={{ left: `${dividerPos}%`, right: 0 }}
-                  onPointerDown={startPan}
-                  onPointerMove={onPan}
-                  onPointerUp={stopPan}
-                  onPointerCancel={stopPan}
-                />
+                {compareMode === "horizontal" && (
+                  <>
+                    {/* Pan overlay on the reference side */}
+                    <div
+                      className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing"
+                      style={{ left: `${dividerPos}%`, right: 0 }}
+                      onPointerDown={startPan}
+                      onPointerMove={onPan}
+                      onPointerUp={stopPan}
+                      onPointerCancel={stopPan}
+                    />
 
-                {/* Draggable divider */}
-                <div
-                  className="absolute top-0 bottom-0 w-px bg-white/80 cursor-col-resize"
-                  style={{ left: `${dividerPos}%` }}
-                  onPointerDown={startDividerDrag}
-                  onPointerMove={onDividerMove}
-                  onPointerUp={stopDividerDrag}
-                  onPointerCancel={stopDividerDrag}
-                >
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-10 h-10 bg-white rounded-full flex items-center justify-center text-neutral-600 shadow-lg text-sm cursor-col-resize touch-none"
-                    onPointerDown={startDividerDrag}
-                    onPointerMove={onDividerMove}
-                    onPointerUp={stopDividerDrag}
-                    onPointerCancel={stopDividerDrag}
-                  >
-                    ↔
-                  </div>
-                </div>
+                    {/* Draggable divider — vertical line */}
+                    <div
+                      className="absolute top-0 bottom-0 w-px bg-white/80 cursor-col-resize"
+                      style={{ left: `${dividerPos}%` }}
+                      onPointerDown={startDividerDrag}
+                      onPointerMove={onDividerMove}
+                      onPointerUp={stopDividerDrag}
+                      onPointerCancel={stopDividerDrag}
+                    >
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-10 h-10 bg-white rounded-full flex items-center justify-center text-neutral-600 shadow-lg text-sm cursor-col-resize touch-none"
+                        onPointerDown={startDividerDrag}
+                        onPointerMove={onDividerMove}
+                        onPointerUp={stopDividerDrag}
+                        onPointerCancel={stopDividerDrag}
+                      >
+                        ↔
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {compareMode === "vertical" && (
+                  <>
+                    {/* Pan overlay on the reference side (below divider) */}
+                    <div
+                      className="absolute left-0 right-0 cursor-grab active:cursor-grabbing"
+                      style={{ top: `${dividerPos}%`, bottom: 0 }}
+                      onPointerDown={startPan}
+                      onPointerMove={onPan}
+                      onPointerUp={stopPan}
+                      onPointerCancel={stopPan}
+                    />
+
+                    {/* Draggable divider — horizontal line */}
+                    <div
+                      className="absolute left-0 right-0 h-px bg-white/80 cursor-row-resize"
+                      style={{ top: `${dividerPos}%` }}
+                      onPointerDown={startDividerDrag}
+                      onPointerMove={onDividerMove}
+                      onPointerUp={stopDividerDrag}
+                      onPointerCancel={stopDividerDrag}
+                    >
+                      <div
+                        className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full flex items-center justify-center text-neutral-600 shadow-lg text-sm cursor-row-resize touch-none"
+                        onPointerDown={startDividerDrag}
+                        onPointerMove={onDividerMove}
+                        onPointerUp={stopDividerDrag}
+                        onPointerCancel={stopDividerDrag}
+                      >
+                        ↕
+                      </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
 
@@ -554,38 +605,76 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
 
             {alignStep === 0 && (
               <>
-                {/* Scale: − value + */}
-                <div className="flex items-center shrink-0">
-                  <button
-                    onClick={() => setRefScale((s) => Math.max(50, s - 1))}
-                    className="w-10 h-10 flex items-center justify-center text-neutral-300 hover:text-white active:bg-neutral-700 transition-colors text-lg font-medium"
-                    aria-label="Decrease scale"
-                  >−</button>
-                  <span className="w-12 text-center text-xs text-neutral-300 tabular-nums shrink-0">{Math.round(refScale)}%</span>
-                  <button
-                    onClick={() => setRefScale((s) => Math.min(200, s + 5))}
-                    className="w-10 h-10 flex items-center justify-center text-neutral-300 hover:text-white active:bg-neutral-700 transition-colors text-lg font-medium"
-                    aria-label="Increase scale"
-                  >+</button>
+                {/* Mode switcher */}
+                <div className="flex items-center shrink-0 border border-neutral-700">
+                  {(["horizontal", "vertical", "overlay"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setCompareMode(m)}
+                      className={`w-10 h-10 flex items-center justify-center text-sm transition-colors ${
+                        compareMode === m
+                          ? "bg-neutral-700 text-white"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                      aria-label={`${m} compare mode`}
+                      aria-pressed={compareMode === m}
+                    >
+                      {m === "horizontal" ? "↔" : m === "vertical" ? "↕" : "⧉"}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Align via two click pairs */}
-                <button
-                  onClick={startAlign}
-                  className="h-10 px-3 text-xs text-neutral-300 hover:text-white active:text-white transition-colors shrink-0"
-                  aria-label="Align by clicking two corresponding points on each image"
-                >
-                  align
-                </button>
+                {compareMode === "overlay" ? (
+                  /* Opacity: − value + */
+                  <div className="flex items-center shrink-0">
+                    <button
+                      onClick={() => setOverlayOpacity((o) => Math.max(0, o - 5))}
+                      className="w-10 h-10 flex items-center justify-center text-neutral-300 hover:text-white active:bg-neutral-700 transition-colors text-lg font-medium"
+                      aria-label="Decrease overlay opacity"
+                    >−</button>
+                    <span className="w-12 text-center text-xs text-neutral-300 tabular-nums shrink-0">{overlayOpacity}%</span>
+                    <button
+                      onClick={() => setOverlayOpacity((o) => Math.min(100, o + 5))}
+                      className="w-10 h-10 flex items-center justify-center text-neutral-300 hover:text-white active:bg-neutral-700 transition-colors text-lg font-medium"
+                      aria-label="Increase overlay opacity"
+                    >+</button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Scale: − value + */}
+                    <div className="flex items-center shrink-0">
+                      <button
+                        onClick={() => setRefScale((s) => Math.max(50, s - 1))}
+                        className="w-10 h-10 flex items-center justify-center text-neutral-300 hover:text-white active:bg-neutral-700 transition-colors text-lg font-medium"
+                        aria-label="Decrease scale"
+                      >−</button>
+                      <span className="w-12 text-center text-xs text-neutral-300 tabular-nums shrink-0">{Math.round(refScale)}%</span>
+                      <button
+                        onClick={() => setRefScale((s) => Math.min(200, s + 5))}
+                        className="w-10 h-10 flex items-center justify-center text-neutral-300 hover:text-white active:bg-neutral-700 transition-colors text-lg font-medium"
+                        aria-label="Increase scale"
+                      >+</button>
+                    </div>
 
-                {/* Reset scale + offset + rotation */}
-                <button
-                  onClick={() => { setRefScale(100); setRefOffset({ x: 0, y: 0 }); setRefRotation(0); }}
-                  className="h-10 px-3 text-xs text-neutral-500 hover:text-neutral-200 active:text-white transition-colors shrink-0"
-                  aria-label="Reset scale, position, and rotation"
-                >
-                  reset
-                </button>
+                    {/* Align via two click pairs */}
+                    <button
+                      onClick={startAlign}
+                      className="h-10 px-3 text-xs text-neutral-300 hover:text-white active:text-white transition-colors shrink-0"
+                      aria-label="Align by clicking two corresponding points on each image"
+                    >
+                      align
+                    </button>
+
+                    {/* Reset scale + offset + rotation */}
+                    <button
+                      onClick={() => { setRefScale(100); setRefOffset({ x: 0, y: 0 }); setRefRotation(0); }}
+                      className="h-10 px-3 text-xs text-neutral-500 hover:text-neutral-200 active:text-white transition-colors shrink-0"
+                      aria-label="Reset scale, position, and rotation"
+                    >
+                      reset
+                    </button>
+                  </>
+                )}
               </>
             )}
 
