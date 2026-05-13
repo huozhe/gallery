@@ -79,14 +79,28 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
   const panOrigin = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
   const compareContainerRef = useRef<HTMLDivElement>(null);
 
-  // Stagger panel position by index so multiple panels don't stack exactly.
+  // Stagger panel position by index, clamped to the viewport. Re-runs on resize/orientation change.
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    const place = () => {
+      const vw = window.innerWidth;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      const w = Math.min(380, vw - 16);
+      // Stagger from top-right; clamp so the panel's top leaves at least 140px of vertical room for content.
+      const desiredX = vw - 420 - index * 30;
+      const desiredY = 88 + index * 30;
       setPos({
-        x: Math.max(16, window.innerWidth - 420 - index * 30),
-        y: 88 + index * 30,
+        x: Math.max(8, Math.min(vw - w - 8, desiredX)),
+        y: Math.max(8, Math.min(Math.max(8, vh - 140), desiredY)),
       });
-    }
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("resize", place);
+    };
   }, [open, index]);
 
   useEffect(() => {
@@ -343,12 +357,18 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
       {/* Draggable, resizable floating panel */}
       {open && (
         <div
-          style={{ left: pos.x, top: pos.y, width: 380, minWidth: 180 }}
-          className="fixed z-50 flex flex-col bg-neutral-900 border border-neutral-700 shadow-2xl select-none overflow-hidden resize-x"
+          style={{
+            left: pos.x,
+            top: pos.y,
+            width: "min(380px, calc(100vw - 16px))",
+            minWidth: 180,
+            maxHeight: `calc(100dvh - ${pos.y + 8}px)`,
+          }}
+          className="fixed z-50 flex flex-col bg-neutral-900 border border-neutral-700 shadow-2xl select-none overflow-hidden resize-x touch-none"
         >
           {/* Title bar — drag handle */}
           <div
-            className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 bg-neutral-800 border-b border-neutral-700 cursor-grab active:cursor-grabbing"
+            className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 bg-neutral-800 border-b border-neutral-700 cursor-grab active:cursor-grabbing touch-none"
             onPointerDown={startDrag}
             onPointerMove={onDrag}
             onPointerUp={stopDrag}
@@ -365,8 +385,11 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
             </button>
           </div>
 
-          {/* Image: height auto-derives from width via aspect-ratio — no empty edges */}
-          <div className="relative w-full" style={{ aspectRatio: `${width} / ${height}` }}>
+          {/* Image: aspect-ratio is the natural target, but min-h-0 + flex-1 lets it shrink so the compare button stays visible. */}
+          <div
+            className="relative w-full min-h-0 flex-1 basis-auto"
+            style={{ aspectRatio: `${width} / ${height}` }}
+          >
             <Image
               src={src}
               alt={alt}
