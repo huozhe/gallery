@@ -77,7 +77,7 @@ Seed data lives in `src/data/seed.ts`. To reset local dev: `rm -rf .data && npm 
 
 **Public (route group `(public)`):**
 - `/` — curatorial rooms view: live works grouped by visible primary-room tags, sorted by `orderByTag[tag.id]`. Slideshow button opens full-screen fade viewer.
-- `/artwork/[slug]` — orientation-aware layout; lightbox; reference image draggable panel with **Compare with artwork** tool (full-screen split-view with divider, `−`/`+` scale, drag-to-pan reference, and two-point alignment that auto-solves scale/rotation/translation); prev/next nav scoped to primary room. Full OG + `twitter:card summary_large_image` metadata.
+- `/artwork/[slug]` — orientation-aware layout; lightbox; reference image draggable panel with **Compare with artwork** tool (full-screen view with three modes: `↔` horizontal split, `↕` vertical split, `⧉` overlay with adjustable opacity; `−`/`+` scale, drag-to-pan reference, and two-point alignment that auto-solves scale/rotation/translation; align first then switch to `⧉` for tracing); prev/next nav scoped to primary room. Full OG + `twitter:card summary_large_image` metadata.
 - `/about` — bio read from store; contact form (sends to `about.email` via Resend); artist email not displayed publicly.
 - `/sitemap.xml` — dynamic; lists homepage, about, all live artwork URLs with `lastModified`.
 - `/robots.txt` — allows public pages, blocks `/admin/`, references sitemap.
