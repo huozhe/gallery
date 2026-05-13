@@ -42,12 +42,12 @@ function imageRectCover(boxW: number, boxH: number, imgW: number, imgH: number):
   return { x: 0, y: (boxH - h) / 2, w, h };
 }
 
-function AlignMarker({ x, y, label, color }: { x: number; y: number; label: string; color: "amber" | "cyan" }) {
+function AlignMarker({ x, y, label, color, counterScale = 1 }: { x: number; y: number; label: string; color: "amber" | "cyan"; counterScale?: number }) {
   const bg = color === "amber" ? "bg-amber-400" : "bg-cyan-400";
   return (
     <div
       className={`absolute w-5 h-5 rounded-full ${bg} border-2 border-white text-[10px] text-neutral-900 font-bold flex items-center justify-center pointer-events-none shadow-md`}
-      style={{ left: x, top: y, transform: "translate(-50%, -50%)" }}
+      style={{ left: x, top: y, transform: `translate(-50%, -50%) scale(${counterScale})` }}
     >{label}</div>
   );
 }
@@ -78,6 +78,19 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
   const isPanning = useRef(false);
   const panOrigin = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
   const compareContainerRef = useRef<HTMLDivElement>(null);
+
+  // Per-side pan/zoom for the alignment view. `tx`/`ty` are translation in panel-px,
+  // `scale` is a multiplier. Reset when align mode opens or closes.
+  const [artView, setArtView] = useState({ scale: 1, tx: 0, ty: 0 });
+  const [refView, setRefView] = useState({ scale: 1, tx: 0, ty: 0 });
+  const artPointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const refPointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  // Pinch-gesture origin per side: distance + midpoint + view at gesture start.
+  const artPinch = useRef<{ d: number; mx: number; my: number; view: { scale: number; tx: number; ty: number } } | null>(null);
+  const refPinch = useRef<{ d: number; mx: number; my: number; view: { scale: number; tx: number; ty: number } } | null>(null);
+  // Track single-pointer down position so we can distinguish a tap (place point) from a drag.
+  const artTap = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const refTap = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   // Stagger panel position by index, clamped to the viewport. Re-runs on resize/orientation change.
   useEffect(() => {
@@ -218,6 +231,8 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
     setDividerPos(50);
     setAlignPoints({ p1: null, q1: null, p2: null });
     setAlignError(null);
+    setArtView({ scale: 1, tx: 0, ty: 0 });
+    setRefView({ scale: 1, tx: 0, ty: 0 });
     setAlignStep(1);
   }
 
@@ -225,23 +240,32 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
     setAlignStep(0);
     setAlignPoints({ p1: null, q1: null, p2: null });
     setAlignError(null);
+    setArtView({ scale: 1, tx: 0, ty: 0 });
+    setRefView({ scale: 1, tx: 0, ty: 0 });
   }
 
-  function clickToNorm(e: React.PointerEvent<HTMLDivElement>, imgW: number, imgH: number): NormPoint {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
+  function clickToNorm(
+    rect: DOMRect,
+    clientX: number,
+    clientY: number,
+    imgW: number,
+    imgH: number,
+    view: { scale: number; tx: number; ty: number },
+  ): NormPoint {
+    // Undo the pan/zoom applied to the image layer, then project to image-natural fractions.
+    const px = (clientX - rect.left - view.tx) / view.scale;
+    const py = (clientY - rect.top - view.ty) / view.scale;
     const imgRect = imageRectContain(rect.width, rect.height, imgW, imgH);
     return {
-      fx: Math.max(0, Math.min(1, (cx - imgRect.x) / imgRect.w)),
-      fy: Math.max(0, Math.min(1, (cy - imgRect.y) / imgRect.h)),
+      fx: Math.max(0, Math.min(1, (px - imgRect.x) / imgRect.w)),
+      fy: Math.max(0, Math.min(1, (py - imgRect.y) / imgRect.h)),
     };
   }
 
-  function handleArtworkClick(e: React.PointerEvent<HTMLDivElement>) {
+  function placeArtworkPoint(rect: DOMRect, clientX: number, clientY: number) {
     if (alignStep !== 1 && alignStep !== 3) return;
     if (!artNaturalSize) return;
-    const norm = clickToNorm(e, artNaturalSize.w, artNaturalSize.h);
+    const norm = clickToNorm(rect, clientX, clientY, artNaturalSize.w, artNaturalSize.h, artView);
     if (alignStep === 1) {
       setAlignPoints((s) => ({ ...s, p1: norm }));
       setAlignError(null);
@@ -252,9 +276,9 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
     }
   }
 
-  function handleReferenceClick(e: React.PointerEvent<HTMLDivElement>) {
+  function placeReferencePoint(rect: DOMRect, clientX: number, clientY: number) {
     if (alignStep !== 2 && alignStep !== 4) return;
-    const norm = clickToNorm(e, width, height);
+    const norm = clickToNorm(rect, clientX, clientY, width, height, refView);
     if (alignStep === 2) {
       setAlignPoints((s) => ({ ...s, q1: norm }));
       setAlignStep(3);
@@ -262,6 +286,119 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
       applyAlign(norm);
     }
   }
+
+  const TAP_THRESHOLD = 6;
+
+  function makeAlignPointerHandlers(
+    pointers: React.RefObject<Map<number, { x: number; y: number }>>,
+    pinch: React.RefObject<{ d: number; mx: number; my: number; view: { scale: number; tx: number; ty: number } } | null>,
+    tap: React.RefObject<{ x: number; y: number; moved: boolean } | null>,
+    getView: () => { scale: number; tx: number; ty: number },
+    setView: React.Dispatch<React.SetStateAction<{ scale: number; tx: number; ty: number }>>,
+    place: (rect: DOMRect, clientX: number, clientY: number) => void,
+  ) {
+    function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      pointers.current!.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.current!.size === 1) {
+        tap.current = { x: e.clientX, y: e.clientY, moved: false };
+        pinch.current = null;
+      } else if (pointers.current!.size === 2) {
+        const pts = Array.from(pointers.current!.values());
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        pinch.current = {
+          d: Math.hypot(dx, dy) || 1,
+          mx: (pts[0].x + pts[1].x) / 2,
+          my: (pts[0].y + pts[1].y) / 2,
+          view: getView(),
+        };
+        tap.current = null;
+      }
+    }
+
+    function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+      if (!pointers.current!.has(e.pointerId)) return;
+      pointers.current!.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.current!.size === 2 && pinch.current) {
+        const pts = Array.from(pointers.current!.values());
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        const d = Math.hypot(dx, dy) || 1;
+        const mx = (pts[0].x + pts[1].x) / 2;
+        const my = (pts[0].y + pts[1].y) / 2;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const start = pinch.current;
+        const nextScale = Math.max(1, Math.min(8, start.view.scale * (d / start.d)));
+        const k = nextScale / start.view.scale;
+        // Keep the start-midpoint's underlying image point pinned to the live midpoint.
+        const sx = start.mx - rect.left;
+        const sy = start.my - rect.top;
+        const tx = (mx - rect.left) - (sx - start.view.tx) * k;
+        const ty = (my - rect.top) - (sy - start.view.ty) * k;
+        setView({ scale: nextScale, tx, ty });
+        return;
+      }
+      if (pointers.current!.size === 1 && tap.current) {
+        const dx = e.clientX - tap.current.x;
+        const dy = e.clientY - tap.current.y;
+        if (Math.hypot(dx, dy) > TAP_THRESHOLD) tap.current.moved = true;
+      }
+    }
+
+    function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+      const wasSingle = pointers.current!.size === 1;
+      pointers.current!.delete(e.pointerId);
+      if (pointers.current!.size < 2) pinch.current = null;
+      if (wasSingle && tap.current && !tap.current.moved) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        place(rect, e.clientX, e.clientY);
+      }
+      tap.current = null;
+    }
+
+    function onPointerCancel(e: React.PointerEvent<HTMLDivElement>) {
+      pointers.current!.delete(e.pointerId);
+      if (pointers.current!.size < 2) pinch.current = null;
+      tap.current = null;
+    }
+
+    function onWheel(e: React.WheelEvent<HTMLDivElement>) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      const view = getView();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const factor = Math.exp(-e.deltaY / 200);
+      const nextScale = Math.max(1, Math.min(8, view.scale * factor));
+      const k = nextScale / view.scale;
+      setView({
+        scale: nextScale,
+        tx: px - (px - view.tx) * k,
+        ty: py - (py - view.ty) * k,
+      });
+    }
+
+    return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel };
+  }
+
+  const artHandlers = makeAlignPointerHandlers(
+    artPointers,
+    artPinch,
+    artTap,
+    () => artView,
+    setArtView,
+    placeArtworkPoint,
+  );
+  const refHandlers = makeAlignPointerHandlers(
+    refPointers,
+    refPinch,
+    refTap,
+    () => refView,
+    setRefView,
+    placeReferencePoint,
+  );
 
   function applyAlign(q2Norm: NormPoint) {
     const { p1, q1, p2 } = alignPoints;
@@ -421,65 +558,93 @@ export default function ReferenceImage({ src, alt, width, height, caption, index
             className="relative flex-1 min-h-0 overflow-hidden select-none"
           >
             {alignStep > 0 ? (
-              // Alignment view — split panels, both images object-contain so user sees them fully
+              // Alignment view — split panels, both images object-contain so user sees them fully.
+              // Pinch-zoom + two-finger pan; single tap places a point.
               <div className="absolute inset-0 flex">
                 {/* Left: artwork */}
                 <div
-                  className="flex-1 relative bg-neutral-950 border-r border-neutral-700 cursor-crosshair"
-                  onPointerDown={handleArtworkClick}
+                  className="flex-1 relative bg-neutral-950 border-r border-neutral-700 cursor-crosshair touch-none overflow-hidden"
+                  onPointerDown={artHandlers.onPointerDown}
+                  onPointerMove={artHandlers.onPointerMove}
+                  onPointerUp={artHandlers.onPointerUp}
+                  onPointerCancel={artHandlers.onPointerCancel}
+                  onWheel={artHandlers.onWheel}
                 >
-                  <Image
-                    src={currentArtworkUrl}
-                    alt={alt}
-                    fill
-                    className="object-contain pointer-events-none"
-                    sizes="50vw"
-                    priority
-                    onLoad={onArtworkLoad}
-                  />
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      transform: `translate(${artView.tx}px, ${artView.ty}px) scale(${artView.scale})`,
+                      transformOrigin: "0 0",
+                    }}
+                  >
+                    <Image
+                      src={currentArtworkUrl}
+                      alt={alt}
+                      fill
+                      className="object-contain pointer-events-none"
+                      sizes="50vw"
+                      priority
+                      onLoad={onArtworkLoad}
+                    />
+                    {alignPoints.p1 && artInPanel && (
+                      <AlignMarker
+                        x={artInPanel.x + alignPoints.p1.fx * artInPanel.w}
+                        y={artInPanel.y + alignPoints.p1.fy * artInPanel.h}
+                        label="1"
+                        color="amber"
+                        counterScale={1 / artView.scale}
+                      />
+                    )}
+                    {alignPoints.p2 && artInPanel && (
+                      <AlignMarker
+                        x={artInPanel.x + alignPoints.p2.fx * artInPanel.w}
+                        y={artInPanel.y + alignPoints.p2.fy * artInPanel.h}
+                        label="2"
+                        color="cyan"
+                        counterScale={1 / artView.scale}
+                      />
+                    )}
+                  </div>
                   <span className="absolute top-3 left-3 text-xs text-white/80 bg-black/40 px-2 py-0.5 pointer-events-none">
-                    Artwork
+                    Artwork {artView.scale > 1.01 && `· ${artView.scale.toFixed(1)}×`}
                   </span>
-                  {alignPoints.p1 && artInPanel && (
-                    <AlignMarker
-                      x={artInPanel.x + alignPoints.p1.fx * artInPanel.w}
-                      y={artInPanel.y + alignPoints.p1.fy * artInPanel.h}
-                      label="1"
-                      color="amber"
-                    />
-                  )}
-                  {alignPoints.p2 && artInPanel && (
-                    <AlignMarker
-                      x={artInPanel.x + alignPoints.p2.fx * artInPanel.w}
-                      y={artInPanel.y + alignPoints.p2.fy * artInPanel.h}
-                      label="2"
-                      color="cyan"
-                    />
-                  )}
                 </div>
                 {/* Right: reference */}
                 <div
-                  className="flex-1 relative bg-neutral-950 cursor-crosshair"
-                  onPointerDown={handleReferenceClick}
+                  className="flex-1 relative bg-neutral-950 cursor-crosshair touch-none overflow-hidden"
+                  onPointerDown={refHandlers.onPointerDown}
+                  onPointerMove={refHandlers.onPointerMove}
+                  onPointerUp={refHandlers.onPointerUp}
+                  onPointerCancel={refHandlers.onPointerCancel}
+                  onWheel={refHandlers.onWheel}
                 >
-                  <Image
-                    src={src}
-                    alt={`Reference: ${alt}`}
-                    fill
-                    className="object-contain pointer-events-none"
-                    sizes="50vw"
-                  />
-                  <span className="absolute top-3 left-3 text-xs text-white/80 bg-black/40 px-2 py-0.5 pointer-events-none">
-                    Reference
-                  </span>
-                  {alignPoints.q1 && refInPanel && (
-                    <AlignMarker
-                      x={refInPanel.x + alignPoints.q1.fx * refInPanel.w}
-                      y={refInPanel.y + alignPoints.q1.fy * refInPanel.h}
-                      label="1"
-                      color="amber"
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      transform: `translate(${refView.tx}px, ${refView.ty}px) scale(${refView.scale})`,
+                      transformOrigin: "0 0",
+                    }}
+                  >
+                    <Image
+                      src={src}
+                      alt={`Reference: ${alt}`}
+                      fill
+                      className="object-contain pointer-events-none"
+                      sizes="50vw"
                     />
-                  )}
+                    {alignPoints.q1 && refInPanel && (
+                      <AlignMarker
+                        x={refInPanel.x + alignPoints.q1.fx * refInPanel.w}
+                        y={refInPanel.y + alignPoints.q1.fy * refInPanel.h}
+                        label="1"
+                        color="amber"
+                        counterScale={1 / refView.scale}
+                      />
+                    )}
+                  </div>
+                  <span className="absolute top-3 left-3 text-xs text-white/80 bg-black/40 px-2 py-0.5 pointer-events-none">
+                    Reference {refView.scale > 1.01 && `· ${refView.scale.toFixed(1)}×`}
+                  </span>
                 </div>
               </div>
             ) : (
