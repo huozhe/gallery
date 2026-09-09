@@ -47,5 +47,8 @@ next-env.d.ts
 # local/personal claude preferences
 .claude/settings.local.json
 
+# session handoff notes — local working doc, not for the public repo
+.claude/STATE.md
+
 # full-res originals — never ship these publicly
 /public/original/
