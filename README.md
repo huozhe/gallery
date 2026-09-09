@@ -131,3 +131,13 @@ CI runs tests and a build on every push and pull request to `main`.
 Built for Vercel. Set the environment variables above, point your domains at the project, and
 `vercel.json` schedules a daily backup to Blob at 02:00 UTC. Backups keep the newest 30 per tenant
 and can be restored from `/admin/backup`.
+
+## License
+
+The code is MIT licensed. See [LICENSE](LICENSE).
+
+**The artwork is not.** The images in `public/artwork/` are photographs of paintings by Zheng Liu,
+included as seed data so the app has something to show on a fresh clone. They are copyright Zheng
+Liu, all rights reserved, and are not covered by the MIT grant. Replace them with your own work
+before deploying this.
+
