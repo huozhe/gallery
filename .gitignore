@@ -46,3 +46,6 @@ next-env.d.ts
 
 # local/personal claude preferences
 .claude/settings.local.json
+
+# full-res originals — never ship these publicly
+/public/original/
