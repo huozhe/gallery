@@ -94,9 +94,11 @@ export default function CompareSurface({
   const refTap = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   // If the artwork source changes (carousel switch on the artwork page), clear cached natural size + any in-progress alignment.
-  const prevArtworkUrl = useRef(artworkUrl);
-  if (prevArtworkUrl.current !== artworkUrl) {
-    prevArtworkUrl.current = artworkUrl;
+  // Tracked in state rather than a ref so the reset happens during render:
+  // https://react.dev/reference/react/useState#storing-information-from-previous-renders
+  const [prevArtworkUrl, setPrevArtworkUrl] = useState(artworkUrl);
+  if (prevArtworkUrl !== artworkUrl) {
+    setPrevArtworkUrl(artworkUrl);
     setArtNaturalSize(null);
     setAlignStep(0);
     setAlignPoints({ p1: null, q1: null, p2: null });
@@ -340,6 +342,10 @@ export default function CompareSurface({
     return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel };
   }
 
+  // makeAlignPointerHandlers only closes over these refs; it reads `.current`
+  // inside the pointer/wheel handlers it returns, never at call time. The rule
+  // cannot see that, so it flags every ref passed in.
+  /* eslint-disable react-hooks/refs */
   const artHandlers = makeAlignPointerHandlers(
     artPointers,
     artPinch,
@@ -356,6 +362,7 @@ export default function CompareSurface({
     setRefView,
     placeReferencePoint,
   );
+  /* eslint-enable react-hooks/refs */
 
   function applyAlign(q2Norm: NormPoint) {
     const { p1, q1, p2 } = alignPoints;

@@ -1,26 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { resolveTenant, getTenantFromHeaders } from "@/lib/tenant";
 
-const ALICE: import("@/lib/tenant").Tenant = {
-  id: "alice",
-  hostnames: ["alice.gallery.app", "alice.com"],
-  name: "Alice",
-  redisPrefix: "prod:alice:",
-  blobPrefix: "prod/alice/",
-  blobId: "aaaaaaaa-0000-0000-0000-000000000000",
-};
-
-const BOB: import("@/lib/tenant").Tenant = {
-  id: "bob",
-  hostnames: ["bob.gallery.app"],
-  name: "Bob",
-  redisPrefix: "prod:bob:",
-  blobPrefix: "prod/bob/",
-  blobId: "bbbbbbbb-0000-0000-0000-000000000000",
-};
-
-const TENANTS_JSON = JSON.stringify([ALICE, BOB]);
-
 let originalGalleryTenants: string | undefined;
 let originalRedisKeyPrefix: string | undefined;
 

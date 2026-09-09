@@ -63,7 +63,6 @@ class PrefixedRedis {
 // Raw ioredis connection — singleton shared across all tenants and requests.
 // Creating a new connection per request would be prohibitively expensive on serverless.
 declare global {
-  // eslint-disable-next-line no-var
   var _redisRaw: Redis | undefined;
 }
 

@@ -332,12 +332,12 @@ function TagEditor({
       {/* Works in this tag */}
       <div className="flex-1 px-6 py-8 overflow-y-auto">
         <div className="flex items-center gap-3 mb-4">
-          <h3 className="text-sm font-medium">Works in "{tag.title}" ({localWorks.length})</h3>
+          <h3 className="text-sm font-medium">Works in &ldquo;{tag.title}&rdquo; ({localWorks.length})</h3>
           {reordering && <span className="text-xs text-neutral-400">Saving order…</span>}
         </div>
 
         {localWorks.length === 0 ? (
-          <p className="text-sm text-neutral-400">No works tagged with "{tag.title}".</p>
+          <p className="text-sm text-neutral-400">No works tagged with &ldquo;{tag.title}&rdquo;.</p>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={localWorks.map((w) => w.id)} strategy={verticalListSortingStrategy}>

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { cookies, headers } from "next/headers";
-import { revalidatePath } from "next/cache";
 
 const mockSessionsGet = vi.fn();
 const mockSessionsUpsert = vi.fn();

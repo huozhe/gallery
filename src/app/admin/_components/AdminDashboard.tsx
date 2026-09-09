@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -55,10 +55,14 @@ export default function AdminDashboard({
   // This makes delete/restore/purge reflect immediately without a manual reload.
   // Drag-reorder still works optimistically because setWorks fires before the
   // server round-trip; when the server confirms, initialWorks arrives with the
-  // same order and the effect is a no-op visually.
-  useEffect(() => {
+  // same order and this is a no-op visually.
+  // Adjusting during render rather than in an effect avoids a second commit:
+  // https://react.dev/reference/react/useState#storing-information-from-previous-renders
+  const [syncedWorks, setSyncedWorks] = useState(initialWorks);
+  if (initialWorks !== syncedWorks) {
+    setSyncedWorks(initialWorks);
     setWorks(initialWorks);
-  }, [initialWorks]);
+  }
 
   const tagById = useMemo(() => {
     const m = new Map<string, Tag>();

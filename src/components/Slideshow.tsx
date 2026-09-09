@@ -21,8 +21,6 @@ export default function Slideshow({ artworks, onClose }: { artworks: Artwork[]; 
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const indexRef = useRef(0);
-  indexRef.current = index;
 
   const goTo = useCallback((next: number) => {
     clearTimeout(fadeTimer.current);
@@ -36,7 +34,7 @@ export default function Slideshow({ artworks, onClose }: { artworks: Artwork[]; 
   // Auto-advance; resets timer whenever index changes
   useEffect(() => {
     const t = setTimeout(
-      () => goTo((indexRef.current + 1) % order.length),
+      () => goTo((index + 1) % order.length),
       INTERVAL_MS,
     );
     return () => clearTimeout(t);
@@ -46,12 +44,12 @@ export default function Slideshow({ artworks, onClose }: { artworks: Artwork[]; 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowRight") goTo((indexRef.current + 1) % order.length);
-      else if (e.key === "ArrowLeft") goTo((indexRef.current - 1 + order.length) % order.length);
+      else if (e.key === "ArrowRight") goTo((index + 1) % order.length);
+      else if (e.key === "ArrowLeft") goTo((index - 1 + order.length) % order.length);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, goTo, order.length]);
+  }, [index, onClose, goTo, order.length]);
 
   // Lock body scroll
   useEffect(() => {
@@ -63,8 +61,8 @@ export default function Slideshow({ artworks, onClose }: { artworks: Artwork[]; 
   const artwork = order[index];
   if (!artwork) return null;
 
-  const prev = () => goTo((indexRef.current - 1 + order.length) % order.length);
-  const next = () => goTo((indexRef.current + 1) % order.length);
+  const prev = () => goTo((index - 1 + order.length) % order.length);
+  const next = () => goTo((index + 1) % order.length);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black">
