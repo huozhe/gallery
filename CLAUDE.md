@@ -29,19 +29,19 @@ The app supports multiple artists via host-header routing. Each artist gets thei
 
 **Tenant headers** (server-side only, never sent to browser):
 - `x-tenant-id`, `x-tenant-name`
-- `x-tenant-redis-prefix` — e.g. `prod:roamingbrush:`
-- `x-tenant-blob-prefix` — e.g. `prod/roamingbrush/`
+- `x-tenant-redis-prefix` — e.g. `prod:stillwater:`
+- `x-tenant-blob-prefix` — e.g. `prod/stillwater/`
 - `x-tenant-blob-id` — UUID for blob path (per-artist)
 
 **`GALLERY_TENANTS` format:**
 ```json
 [
   {
-    "id": "roamingbrush",
-    "hostnames": ["roamingbrush.art", "www.roamingbrush.art", "gallery-alpha-five.vercel.app"],
-    "name": "Roaming Brush",
-    "redisPrefix": "prod:roamingbrush:",
-    "blobPrefix": "prod/roamingbrush/",
+    "id": "stillwater",
+    "hostnames": ["stillwater.example.com", "www.stillwater.example.com", "gallery-stillwater.vercel.app"],
+    "name": "Stillwater Studio",
+    "redisPrefix": "prod:stillwater:",
+    "blobPrefix": "prod/stillwater/",
     "blobId": "00000000-0000-0000-0000-0000000000ff",
     "adminEmail": "artist@example.com",
     "adminPassword": "initial-password"
@@ -146,7 +146,7 @@ BLOB_PATH_PREFIX=dev/
 ```
 Or with `GALLERY_TENANTS`:
 ```
-GALLERY_TENANTS=[{"id":"roamingbrush","hostnames":["localhost","roamingbrush.localhost"],...}]
+GALLERY_TENANTS=[{"id":"stillwater","hostnames":["localhost","stillwater.localhost"],...}]
 ```
 Production: set `GALLERY_TENANTS` in Vercel env vars; remove `REDIS_KEY_PREFIX`, `BLOB_PATH_PREFIX`, `ARTIST_BLOB_ID`.
 
